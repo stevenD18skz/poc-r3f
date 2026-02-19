@@ -11,10 +11,6 @@ import * as THREE from 'three'
 import FPSControls from '@/components/controls/FPSControls'
 import { usePlayerMovement } from '@/hooks/usePlayerMovement'
 
-// Habitaciones
-import LivingRoom from '@/components/world/rooms/LivingRoom'
-import Kitchen from '@/components/world/rooms/kitchen'
-import RoomBig from '@/components/world/rooms/RoomBig'
 import GameUI from '../ui/GameUI'
 
 // Componente invisible que maneja la lógica de movimiento del jugador
@@ -25,6 +21,7 @@ function Player() {
 
 import { useGameStore } from '@/logic/gameStore'
 import Bathroom from './rooms/Bathroom'
+import RoomGenerator from '../gen/RoomGenerator'
 
 // Componente que rastrea en qué habitación estás
 function RoomTracker() {
@@ -112,19 +109,9 @@ export default function House() {
                 <SceneLights />
                 <Environment preset="forest" background />
 
-                {/* MUNDO - Aquí cargamos las habitaciones */}
+                {/* Generador de habitaciones */}
                 <Suspense fallback={null}>
-                    {/* SALA PRINCIPAL */}
-                    <LivingRoom position={[0, 0, 0]} />
-
-                    {/* COCINA */}
-                    <Kitchen position={[32, 0, 0]} />
-
-                    {/* Habitación grande */}
-                    <RoomBig position={[0, 0, 32]} />
-
-                    {/* Baño */}
-                    <Bathroom position={[32, 0, 32]} />
+                    <RoomGenerator position={[0, 0, 0]} />
                 </Suspense>
 
             </Canvas>

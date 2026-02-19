@@ -1,32 +1,29 @@
+import type { ThreeElements } from '@react-three/fiber'
 import Floor from '@/components/world/elemtns/Floor'
-import Box from '@/components/Box'
 import Walls from '@/components/world/elemtns/Walls'
 import Cat from '@/components/pets/cat/Cat'
+import Toilet from '@/components/world/furniture/Toilet'
 
-export default function RoomBig(props: any) {
-    const sizeRoom = 32
+type GroupProps = ThreeElements['group']
+interface BathroomProps extends GroupProps {
+    sizeRoom: number
+    walls: { position: string, type: string }[]
+}
+
+export default function Bathroom({ sizeRoom, walls, ...groupProps }: BathroomProps) {
 
     return (
-        <group {...props}>
-            {/* Suelo y Paredes de la Cocina */}
+        <group {...groupProps}>
+            {/* Suelo y Paredes */}
             <group>
                 <Floor size={sizeRoom} />
-                {/* Pared Fondo */}
+                {/* Paredes */}
                 <Walls size={sizeRoom} position="front" />
                 <Walls size={sizeRoom} position="right" />
             </group>
 
-            {/* Muebles de Cocina (Simulados) */}
-            {/* Nevera */}
-            <Box position={[5, 2, 0]} />
-
-            {/* Mesón */}
-            <Box position={[-5, 2, 0]} />
-
-            {/* Gato */}
-            <Cat position={[0, 2, 0]} scale={0.125} />
-
-
+            {/* Muebles */}
+            <Toilet position={[2, 2, 0]} scale={10} />
         </group>
     )
 }

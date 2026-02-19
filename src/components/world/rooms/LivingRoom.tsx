@@ -1,28 +1,44 @@
 'use client'
 
+import { Fragment } from 'react'
+
+import type { ThreeElements } from '@react-three/fiber'
 import { Center } from '@react-three/drei'
 
 import Box from '@/components/Box'
 import InteractableSnoopy from '@/components/pets/snoopy/InteractableSnoopy'
-import Table from '@/components/furniture/Table'
-import Window from '@/components/furniture/Window'
+import Table from '@/components/world/furniture/Table'
+import Window from '@/components/world/furniture/Window'
 import Floor from '@/components/world/elemtns/Floor'
 import Walls from '@/components/world/elemtns/Walls'
 import Door from '@/components/world/elemtns/door'
 
-export default function LivingRoom(props: any) {
-  const colorFloor = "#5C330A"
-  const sizeRoom = 32
+type GroupProps = ThreeElements['group']
+
+interface LivingRoom extends GroupProps {
+  sizeRoom: number
+  walls: { position: string, type: string }[]
+}
+
+
+export default function LivingRoom({ sizeRoom, walls, ...groupProps }: LivingRoom) {
 
   return (
-    <group {...props}>
+    <group {...groupProps}>
       {/* Suelo y paredes */}
       <group>
         <Floor size={sizeRoom} />
+
         {/* Pared Frontal */}
-        <Walls size={sizeRoom} position="back" />
-        <Walls size={sizeRoom} position="left" />
-        <Door size={sizeRoom} position="front" />
+        {walls.map((wall, index) => (
+          wall.type === "wall" ? (
+            <Walls key={index} size={sizeRoom} position={wall.position as "back" | "right" | "front" | "left"} />
+          ) : wall.type === "door" ? (
+            <Door key={index} size={sizeRoom} position={wall.position as "back" | "right" | "front" | "left"} />
+          ) : (
+            <Fragment key={index} />
+          )
+        ))}
       </group>
 
       {/* contenido 3D */}
