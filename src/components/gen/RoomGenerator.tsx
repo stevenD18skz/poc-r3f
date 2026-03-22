@@ -8,8 +8,11 @@ import LivingRoom from '@/components/world/rooms/LivingRoom'
 import RoomBig from '@/components/world/rooms/RoomBig'
 import processMap from '@/app/helpers/generator'
 import type Room from '@/app/types/room'
-import { useMemo, useState } from 'react'
+import { useGameStore } from '@/logic/gameStore'
 import { useControls, button } from 'leva'
+import InteractablePet from '@/components/pets/InteractablePet'
+import Snoopy from '@/components/pets/snoopy/Snoopy'
+import Cat from '@/components/pets/cat/Cat'
 
 export default function RoomGenerator(props: any) {
     const sizeRoom = 32
@@ -21,13 +24,12 @@ export default function RoomGenerator(props: any) {
         3: RoomBig
     }
 
-    const [seed, setSeed] = useState(0)
+    const board = useGameStore(s => s.board)
+    const regenerateBoard = useGameStore(s => s.regenerateBoard)
 
     useControls('Map Generation', {
-        regenerate: button(() => setSeed(s => s + 1))
+        regenerate: button(() => regenerateBoard())
     })
-
-    const board = useMemo(() => processMap(3), [seed])
 
     return (
         <group {...props}>
@@ -36,20 +38,41 @@ export default function RoomGenerator(props: any) {
             {board.map((row: Room[], rowIndex: number) => (
                 row.map((room: Room, colIndex: number) => {
                     const RoomComponent = rooms[room.type as keyof typeof rooms]
+                    const position: [number, number, number] = [
+                        colIndex * sizeRoom,
+                        0,
+                        rowIndex * sizeRoom
+                    ]
+
                     return (
-                        <RoomComponent
-                            key={`${rowIndex}-${colIndex}`}
-                            sizeRoom={sizeRoom}
-                            walls={room.walls}
-                            position={[
-                                colIndex * sizeRoom,
-                                0,
-                                rowIndex * sizeRoom
-                            ]}
-                        />
+                        <group key={`${rowIndex}-${colIndex}`}>
+                            <RoomComponent
+                                sizeRoom={sizeRoom}
+                                walls={room.walls}
+                                position={position}
+                            />
+                            
+                            {/* Renderizar mascota dinámicamente si el generador asignó una */}
+                            {room.petId === 'snoopy' && (
+                                <InteractablePet petId="snoopy" position={[position[0], 1, position[2]]}>
+                                    <Snoopy />
+                                </InteractablePet>
+                            )}
+                            {room.petId === 'cat-1' && (
+                                <InteractablePet petId="cat-1" position={[position[0] - 3, 0, position[2] + 3]}>
+                                    <Cat scale={0.15} />
+                                </InteractablePet>
+                            )}
+                            {room.petId === 'cat-2' && (
+                                <InteractablePet petId="cat-2" position={[position[0] + 3, 0, position[2] - 3]}>
+                                    <Cat scale={0.15} />
+                                </InteractablePet>
+                            )}
+                        </group>
                     )
                 })
             ))}
         </group>
     )
 }
+

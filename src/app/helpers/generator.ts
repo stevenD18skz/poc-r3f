@@ -71,13 +71,30 @@ const processMap = (size: number) => {
     map.forEach((row, y) => {
         const gridRow: Room[] = []
         row.forEach((cell, x) => {
-            console.log(`${DefineRoom(cell)} en: ${x}, ${y}`);
             gridRow.push({
                 type: cell,
                 walls: DefineWall(cell, x, y)
             })
         })
         grid.push(gridRow)
+    })
+
+    // Asignar 3 mascotas a coordenadas aleatorias distintas
+    const allCoords: { x: number, y: number }[] = []
+    for (let y = 0; y < size; y++) {
+        for (let x = 0; x < size; x++) {
+            allCoords.push({ x, y })
+        }
+    }
+    // Barajar aleatoriamente
+    allCoords.sort(() => Math.random() - 0.5)
+
+    const petsToAssign = ['snoopy', 'cat-1', 'cat-2']
+    petsToAssign.forEach((petId, i) => {
+        if (i < allCoords.length) {
+            const { x, y } = allCoords[i]
+            grid[y][x].petId = petId
+        }
     })
 
     return grid

@@ -6,8 +6,6 @@ import type { ThreeElements } from '@react-three/fiber'
 import { Center } from '@react-three/drei'
 
 import Box from '@/components/Box'
-import InteractablePet from '@/components/pets/InteractablePet'
-import Snoopy from '@/components/pets/snoopy/Snoopy'
 import Table from '@/components/world/furniture/Table'
 import Window from '@/components/world/furniture/Window'
 import Floor from '@/components/world/elemtns/Floor'
@@ -45,9 +43,7 @@ export default function LivingRoom({ sizeRoom, walls, ...groupProps }: LivingRoo
       {/* contenido 3D */}
       <Box position={[3, 1, 0]} />
 
-      <InteractablePet petId="snoopy" position={[0, 1, 0]}>
-        <Snoopy />
-      </InteractablePet>
+
 
       <Center top position={[5, 0, 5]}>
         <Table />

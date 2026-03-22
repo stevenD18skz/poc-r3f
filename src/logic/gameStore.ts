@@ -1,10 +1,12 @@
 import { create } from 'zustand'
+import processMap from '@/app/helpers/generator'
+import type Room from '@/app/types/room'
 
 // ─────────────────────────────────────────────
 // TYPES
 // ─────────────────────────────────────────────
 
-export type PetId = 'snoopy' | 'cat-bathroom' | 'cat-bedroom'
+export type PetId = 'snoopy' | 'cat-1' | 'cat-2'
 
 export interface Pet {
     id: PetId
@@ -35,8 +37,8 @@ export interface Player {
 
 const INITIAL_PETS: Pet[] = [
     { id: 'snoopy',       name: 'Snoopy',    emoji: '🐶', isFed: false },
-    { id: 'cat-bathroom', name: 'Whiskers',  emoji: '🐱', isFed: false },
-    { id: 'cat-bedroom',  name: 'Mittens',   emoji: '🐾', isFed: false },
+    { id: 'cat-1',        name: 'Whiskers',  emoji: '🐱', isFed: false },
+    { id: 'cat-2',        name: 'Mittens',   emoji: '🐾', isFed: false },
 ]
 
 const INITIAL_MISSIONS: Mission[] = [
@@ -45,7 +47,7 @@ const INITIAL_MISSIONS: Mission[] = [
         title: '¡Hora de comer!',
         description: 'Alimenta a las 3 mascotas repartidas por la casa.',
         status: 'in-progress',
-        requiredPets: ['snoopy', 'cat-bathroom', 'cat-bedroom'],
+        requiredPets: ['snoopy', 'cat-1', 'cat-2'],
     },
 ]
 
@@ -64,6 +66,10 @@ interface GameState {
 
     // — Missions —
     missions: Mission[]
+
+    // — Map Configuration —
+    board: Room[][]
+    regenerateBoard: () => void
 
     // — Game control —
     isPlaying: boolean
@@ -128,6 +134,10 @@ export const useGameStore = create<GameState>((set, get) => ({
 
     // ── Missions ──
     missions: INITIAL_MISSIONS,
+
+    // ── Map Configuration ──
+    board: processMap(3),
+    regenerateBoard: () => set({ board: processMap(3) }),
 
     // ── Game control ──
     isPlaying: false,
