@@ -3,6 +3,7 @@ import type { ThreeElements } from '@react-three/fiber'
 import Floor from '@/components/world/elemtns/Floor'
 import Walls from '@/components/world/elemtns/Walls'
 import Door from '@/components/world/elemtns/door'
+import InteractablePet from '@/components/pets/InteractablePet'
 import Cat from '@/components/pets/cat/Cat'
 import Toilet from '@/components/world/furniture/Toilet'
 
@@ -32,6 +33,11 @@ export default function Bathroom({ sizeRoom, walls, ...groupProps }: BathroomPro
 
             {/* Muebles */}
             <Toilet position={[2, 2, 0]} scale={10} />
+
+            {/* Mascota: Whiskers */}
+            <InteractablePet petId="cat-bathroom" position={[-4, 0, -4]}>
+                <Cat scale={0.2} />
+            </InteractablePet>
         </group>
     )
 }
