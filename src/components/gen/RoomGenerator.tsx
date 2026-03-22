@@ -23,6 +23,8 @@ export default function RoomGenerator(props: any) {
 
     console.log(board)
 
+    console.log("=====================================")
+
     return (
         <group {...props}>
             <Floor size={sizeRoom} />

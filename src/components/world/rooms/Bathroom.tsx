@@ -1,6 +1,8 @@
+import { Fragment } from 'react'
 import type { ThreeElements } from '@react-three/fiber'
 import Floor from '@/components/world/elemtns/Floor'
 import Walls from '@/components/world/elemtns/Walls'
+import Door from '@/components/world/elemtns/door'
 import Cat from '@/components/pets/cat/Cat'
 import Toilet from '@/components/world/furniture/Toilet'
 
@@ -17,9 +19,15 @@ export default function Bathroom({ sizeRoom, walls, ...groupProps }: BathroomPro
             {/* Suelo y Paredes */}
             <group>
                 <Floor size={sizeRoom} />
-                {/* Paredes */}
-                <Walls size={sizeRoom} position="front" />
-                <Walls size={sizeRoom} position="right" />
+                {walls.map((wall, index) => (
+                    wall.type === "wall" ? (
+                        <Walls key={index} size={sizeRoom} position={wall.position as "back" | "right" | "front" | "left"} />
+                    ) : wall.type === "door" ? (
+                        <Door key={index} size={sizeRoom} position={wall.position as "back" | "right" | "front" | "left"} />
+                    ) : (
+                        <Fragment key={index} />
+                    )
+                ))}
             </group>
 
             {/* Muebles */}

@@ -1,6 +1,8 @@
+import { Fragment } from 'react'
 import type { ThreeElements } from '@react-three/fiber'
 import Floor from '@/components/world/elemtns/Floor'
 import Walls from '@/components/world/elemtns/Walls'
+import Door from '@/components/world/elemtns/door'
 import Fridge from '@/components/world/furniture/Fridge'
 
 type GroupProps = ThreeElements['group']
@@ -16,9 +18,15 @@ export default function Kitchen({ sizeRoom, walls, ...groupProps }: KitchenProps
             {/* Suelo y Paredes de la Cocina */}
             <group>
                 <Floor size={sizeRoom} />
-                {/* Pared Fondo */}
-                <Walls size={sizeRoom} position="back" />
-                <Walls size={sizeRoom} position="right" />
+                {walls.map((wall, index) => (
+                    wall.type === "wall" ? (
+                        <Walls key={index} size={sizeRoom} position={wall.position as "back" | "right" | "front" | "left"} />
+                    ) : wall.type === "door" ? (
+                        <Door key={index} size={sizeRoom} position={wall.position as "back" | "right" | "front" | "left"} />
+                    ) : (
+                        <Fragment key={index} />
+                    )
+                ))}
             </group>
 
             {/* Muebles de Cocina*/}

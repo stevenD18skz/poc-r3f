@@ -18,10 +18,10 @@ export default function Door({ size, position }: { size: number, position: 'left
     })
 
     const positionDoor: { [key: string]: [number, number, number] } = {
-        back: [0, sizeWall-sizeWall / 4, -size / 2],
-        right: [size / 2, sizeWall - sizeWall / 4, 0],
-        front: [0, sizeWall - sizeWall / 4, size / 2],
-        left: [-size / 2, sizeWall - sizeWall / 4, 0],
+        back: [0, sizeWall / 4, -size / 2],
+        right: [size / 2, sizeWall / 4, 0],
+        front: [0, sizeWall / 4, size / 2],
+        left: [-size / 2, sizeWall / 4, 0],
     }
 
     const rotationDoor: { [key: string]: [number, number, number] } = {

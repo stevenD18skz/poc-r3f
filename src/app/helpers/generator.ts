@@ -33,33 +33,30 @@ const processMap = (size: number) => {
     }
 
 
-    const DefineWall = (cell: number, x: number, y: number) => {
-        const directions: [number, number, string][] = [[0, -1, "Back"], [1, 0, "Right"], [0, 1, "Front"], [-1, 0, "Left"]]
+    const wallCache: Record<string, string> = {}
+
+    const getWallType = (x1: number, y1: number, x2: number, y2: number) => {
+        const key = [[x1, y1], [x2, y2]].sort((a, b) => a[0] - b[0] || a[1] - b[1]).map(p => p.join(',')).join('|')
+        if (wallCache[key]) return wallCache[key]
+
+        const randInt = Math.floor(Math.random() * 3) + 1
+        const type = randInt === 1 ? "wall" : randInt === 2 ? "free" : "door"
+        wallCache[key] = type
+        return type
+    }
+
+    const DefineWall = (cell: number, x: number, y: number): { type: string, position: string }[] => {
+        const directions: [number, number, string][] = [[1, 0, "right"], [-1, 0, "left"], [0, 1, "front"], [0, -1, "back"]]
         const walls: { type: string, position: string }[] = []
 
-        directions.forEach((direction: [number, number, string]) => {
+        directions.forEach((direction) => {
             const nx = x + direction[0]
             const ny = y + direction[1]
             if (nx >= 0 && nx < map[0].length && ny >= 0 && ny < map.length) {
-                const randInt = Math.floor(Math.random() * 3) + 1
-                if (randInt === 1) {
-                    walls.push({
-                        type: "wall",
-                        position: direction[2]
-                    })
-                }
-                else if (randInt === 2) {
-                    walls.push({
-                        type: "free",
-                        position: direction[2]
-                    })
-                }
-                else {
-                    walls.push({
-                        type: "door",
-                        position: direction[2]
-                    })
-                }
+                walls.push({
+                    type: getWallType(x, y, nx, ny),
+                    position: direction[2]
+                })
             }
             else {
                 walls.push({
@@ -74,7 +71,7 @@ const processMap = (size: number) => {
     map.forEach((row, y) => {
         const gridRow: Room[] = []
         row.forEach((cell, x) => {
-            console.log(`${DefineRoom(cell)} en: ${x}, ${y} ======== Paredes: ${JSON.stringify(DefineWall(cell, x, y))}\n`);
+            console.log(`${DefineRoom(cell)} en: ${x}, ${y}`);
             gridRow.push({
                 type: cell,
                 walls: DefineWall(cell, x, y)
@@ -84,8 +81,9 @@ const processMap = (size: number) => {
     })
 
     return grid
-
 }
+
+
 
 
 export default processMap

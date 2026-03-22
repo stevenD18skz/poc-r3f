@@ -1,6 +1,8 @@
+import { Fragment } from 'react'
 import type { ThreeElements } from '@react-three/fiber'
 import Floor from '@/components/world/elemtns/Floor'
 import Walls from '@/components/world/elemtns/Walls'
+import Door from '@/components/world/elemtns/door'
 import Bed from '@/components/world/furniture/Bed'
 
 type GroupProps = ThreeElements['group']
@@ -16,9 +18,15 @@ export default function RoomBig({ sizeRoom, walls, ...groupProps }: RoomBigProps
             {/* Suelo y Paredes */}
             <group>
                 <Floor size={sizeRoom} />
-                {/* Pared Fondo */}
-                <Walls size={sizeRoom} position="front" />
-                <Walls size={sizeRoom} position="left" />
+                {walls.map((wall, index) => (
+                    wall.type === "wall" ? (
+                        <Walls key={index} size={sizeRoom} position={wall.position as "back" | "right" | "front" | "left"} />
+                    ) : wall.type === "door" ? (
+                        <Door key={index} size={sizeRoom} position={wall.position as "back" | "right" | "front" | "left"} />
+                    ) : (
+                        <Fragment key={index} />
+                    )
+                ))}
             </group>
 
             {/* Muebles */}
