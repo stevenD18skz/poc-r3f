@@ -1,6 +1,5 @@
 'use client'
 
-import { useEffect } from 'react'
 import { useGameStore } from '@/logic/gameStore'
 
 export default function GameUI() {
@@ -10,17 +9,6 @@ export default function GameUI() {
   const setIsPlaying = useGameStore(state => state.setIsPlaying)
   const currentRoom = useGameStore(state => state.currentRoom)
 
-  // Escuchar cambios en el PointerLock para sincronizar el estado global
-  useEffect(() => {
-    const handleLockChange = () => {
-      // Sincronizamos el estado del store con el estado real del puntero
-      setIsPlaying(!!document.pointerLockElement)
-    }
-
-    document.addEventListener('pointerlockchange', handleLockChange)
-    return () => document.removeEventListener('pointerlockchange', handleLockChange)
-  }, [setIsPlaying])
-
   return (
     <>
       {/* --- MENU INICIAL / PAUSA --- */}
@@ -28,7 +16,7 @@ export default function GameUI() {
       {!isPlaying && (
         <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 transition-all duration-500">
           <div className="bg-white/10 text-white p-10 rounded-2xl text-center shadow-2xl border border-white/20 max-w-lg w-full">
-            <h1 className="text-5xl font-extrabold mb-6 bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent drop-shadow-lg">
+            <h1 className="text-5xl font-extrabold mb-6 bg-linear-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent drop-shadow-lg">
               Snoopy's House
             </h1>
             <p className="mb-8 text-lg text-gray-200 font-light">

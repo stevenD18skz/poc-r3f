@@ -8,6 +8,8 @@ import LivingRoom from '@/components/world/rooms/LivingRoom'
 import RoomBig from '@/components/world/rooms/RoomBig'
 import processMap from '@/app/helpers/generator'
 import type Room from '@/app/types/room'
+import { useMemo, useState } from 'react'
+import { useControls, button } from 'leva'
 
 export default function RoomGenerator(props: any) {
     const sizeRoom = 32
@@ -19,11 +21,13 @@ export default function RoomGenerator(props: any) {
         3: RoomBig
     }
 
-    const board = processMap(3)
+    const [seed, setSeed] = useState(0)
 
-    console.log(board)
+    useControls('Map Generation', {
+        regenerate: button(() => setSeed(s => s + 1))
+    })
 
-    console.log("=====================================")
+    const board = useMemo(() => processMap(3), [seed])
 
     return (
         <group {...props}>
