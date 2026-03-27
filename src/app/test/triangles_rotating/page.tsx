@@ -4,7 +4,7 @@ import { Canvas, useFrame } from '@react-three/fiber'
 import { useRef, useMemo } from 'react'
 import * as THREE from 'three'
 import PerformanceOverlay from '@/components/test/PerformanceOverlay'
-import DebugTools from '@/components/DebugTools'
+import DebugTools, { useDebugControls } from '@/components/DebugTools'
 import { OrbitControls } from '@react-three/drei'
 
 function RotatingTriangle({ position, color, rotationSpeed }: { position: [number, number, number], color: string, rotationSpeed: number }) {
@@ -23,10 +23,10 @@ function RotatingTriangle({ position, color, rotationSpeed }: { position: [numbe
   )
 }
 
-function TriangleScene() {
-  const triangles = useMemo(() => {
+function TriangleScene({ numTriangles }: { numTriangles: number }) {
+  const triangles = (() => {
     const list = []
-    for (let i = 0; i < 1000; i++) {
+    for (let i = 0; i < numTriangles; i++) {
       const theta = Math.random() * Math.PI * 2
       const phi = Math.random() * Math.PI
       const r = 5 + Math.random() * 5
@@ -42,7 +42,7 @@ function TriangleScene() {
       })
     }
     return list
-  }, [])
+  })()
 
   return (
     <>
@@ -56,18 +56,20 @@ function TriangleScene() {
 }
 
 export default function TrianglesRotatingTest() {
+  const { triangles } = useDebugControls()
+
   return (
     <main className="w-full h-screen bg-[#050505] overflow-hidden">
-      <PerformanceOverlay title="10,000 Triángulos Rotando" />
+      <PerformanceOverlay title={`Triángulos Rotando (${triangles})`} />
       
       <Canvas camera={{ position: [0, 0, 15], fov: 50 }}>
           <DebugTools />
           <OrbitControls makeDefault />
-          <TriangleScene />
+          <TriangleScene numTriangles={triangles} />
       </Canvas>
 
       <div className="fixed bottom-0 left-0 w-full p-8 text-white/30 text-xs pointer-events-none text-center font-mono">
-        STRESS TEST - INDIVIDUAL MATRIX UPDATES - 1,000 OBJECTS
+        STRESS TEST - INDIVIDUAL MATRIX UPDATES - {triangles} OBJECTS
       </div>
     </main>
   )

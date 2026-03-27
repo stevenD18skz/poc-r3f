@@ -10,18 +10,18 @@ export default function TestDashboard() {
       icon: '🧊'
     },
     {
-      id: 'triangles_rotating',
-      title: '1,000 Triángulos Rotando',
-      description: 'Prueba de estrés de CPU/GPU mediante el procesamiento de transformaciones en tiempo real.',
-      path: '/test/triangles_rotating',
-      icon: '🌀'
-    },
-    {
       id: 'triangles_static',
-      title: '10,000 Triángulos Estáticos',
+      title: '512,000 Triángulos Estáticos',
       description: 'Prueba de renderizado masivo y gestión de buffers en WebGL.',
       path: '/test/triangles_static',
       icon: '📐'
+    },
+    {
+      id: 'triangles_rotating',
+      title: '4,000 Triángulos Rotando',
+      description: 'Prueba de estrés de CPU/GPU mediante el procesamiento de transformaciones en tiempo real.',
+      path: '/test/triangles_rotating',
+      icon: '🌀'
     },
     {
       id: 'dynamic_lights',

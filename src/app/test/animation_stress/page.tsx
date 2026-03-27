@@ -38,9 +38,9 @@ function AnimationScene({ count }: { count: number }) {
   const spheres = useMemo(() => {
     const list = []
     for (let i = 0; i < count; i++) {
-      const theta = (i / count) * Math.PI * 2
+      const theta = (i / count) * Math.PI * 8
       const ring = Math.floor(i / 50)
-      const r = 3 + ring * 2.5
+      const r = 3 + ring * 1
       list.push({
         position: [Math.cos(theta) * r, 0, Math.sin(theta) * r] as [number, number, number],
         delay: i * 0.15
@@ -69,7 +69,7 @@ export default function AnimationStressTest() {
       <Canvas camera={{ position: [0, 15, 25], fov: 50 }}>
         <DebugTools />
         <OrbitControls makeDefault />
-        <AnimationScene count={500} />
+        <AnimationScene count={2000} />
       </Canvas>
 
       <div className="fixed bottom-0 left-0 w-full p-8 text-white/30 text-xs pointer-events-none text-center font-mono">

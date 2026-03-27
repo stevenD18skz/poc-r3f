@@ -12,7 +12,7 @@ export function useDebugControls() {
     return useControls('Debug', {
         showAxes: true,
         showGrid: true,
-        showStats: false,
+        showStats: true,
         statPanel: { 
             value: 0, 
             options: { 'FPS': 0, 'MS (Latencia)': 1, 'MB (Memoria RAM)': 2 },
@@ -20,12 +20,19 @@ export function useDebugControls() {
         },
         showPerf: true,
         showGizmo: true,
-        freeCam: true
+        freeCam: true,
+        triangles: {
+            value: 1_000,
+            min: 1_000,
+            max: 32_000,
+            step: 1_000,
+            label: 'Triángulos'
+        }
     })
 }
 
 export default function DebugTools() {
-    const { showAxes, showGrid, showStats, statPanel, showGizmo, showPerf } = useDebugControls()
+    const { showAxes, showGrid, showStats, statPanel, showGizmo, showPerf, triangles } = useDebugControls()
 
     return (
         <>

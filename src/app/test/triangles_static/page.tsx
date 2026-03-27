@@ -4,7 +4,7 @@ import { Canvas, useFrame } from '@react-three/fiber'
 import { useRef, useMemo, useEffect } from 'react'
 import * as THREE from 'three'
 import PerformanceOverlay from '@/components/test/PerformanceOverlay'
-import DebugTools from '@/components/DebugTools'
+import DebugTools, { useDebugControls } from '@/components/DebugTools'
 import { OrbitControls, Sparkles } from '@react-three/drei'
 
 function InstancedTriangles({ count = 10000 }) {
@@ -49,9 +49,11 @@ function InstancedTriangles({ count = 10000 }) {
 }
 
 export default function TrianglesStaticTest() {
+  const { triangles } = useDebugControls()
+
   return (
     <main className="w-full h-screen bg-[#050505] overflow-hidden">
-      <PerformanceOverlay title="10,000 Triángulos Estáticos" />
+      <PerformanceOverlay title={`${512_000} Triángulos Estáticos`} />
       
       <Canvas camera={{ position: [20, 20, 20], fov: 50 }}>
           <DebugTools />
@@ -62,7 +64,7 @@ export default function TrianglesStaticTest() {
           <pointLight position={[-10, -10, -10]} intensity={1} color="#9333ea" />
           
           <Sparkles count={500} size={5} speed={0.5} scale={30} opacity={0.3} color="#ffffff" />
-          <InstancedTriangles count={10000} />
+          <InstancedTriangles count={512_000} />
       </Canvas>
 
       <div className="fixed bottom-0 left-0 w-full p-8 text-white/30 text-xs pointer-events-none text-center font-mono">
