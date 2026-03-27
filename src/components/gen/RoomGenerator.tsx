@@ -6,8 +6,8 @@ import Bathroom from '@/components/world/rooms/Bathroom'
 import Kitchen from '@/components/world/rooms/kitchen'
 import LivingRoom from '@/components/world/rooms/LivingRoom'
 import RoomBig from '@/components/world/rooms/RoomBig'
-import processMap from '@/app/helpers/generator'
-import type Room from '@/app/types/room'
+import processMap from '@/helpers/generator'
+import type Room from '@/types/room'
 import { useGameStore } from '@/logic/gameStore'
 import { useControls, button } from 'leva'
 import InteractablePet from '@/components/pets/InteractablePet'
@@ -51,7 +51,7 @@ export default function RoomGenerator(props: any) {
                                 walls={room.walls}
                                 position={position}
                             />
-                            
+
                             {/* Renderizar mascota dinámicamente si el generador asignó una */}
                             {room.petId === 'snoopy' && (
                                 <InteractablePet petId="snoopy" position={[position[0], 1, position[2]]}>

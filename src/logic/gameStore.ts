@@ -1,6 +1,6 @@
 import { create } from 'zustand'
-import processMap from '@/app/helpers/generator'
-import type Room from '@/app/types/room'
+import processMap from '@/helpers/generator'
+import type Room from '@/types/room'
 
 // ─────────────────────────────────────────────
 // TYPES
@@ -36,9 +36,9 @@ export interface Player {
 // ─────────────────────────────────────────────
 
 const INITIAL_PETS: Pet[] = [
-    { id: 'snoopy',       name: 'Snoopy',    emoji: '🐶', isFed: false },
-    { id: 'cat-1',        name: 'Whiskers',  emoji: '🐱', isFed: false },
-    { id: 'cat-2',        name: 'Mittens',   emoji: '🐾', isFed: false },
+    { id: 'snoopy', name: 'Snoopy', emoji: '🐶', isFed: false },
+    { id: 'cat-1', name: 'Whiskers', emoji: '🐱', isFed: false },
+    { id: 'cat-2', name: 'Mittens', emoji: '🐾', isFed: false },
 ]
 
 const INITIAL_MISSIONS: Mission[] = [

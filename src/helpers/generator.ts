@@ -1,4 +1,4 @@
-import Room from "../types/room"
+import Room from "../app/types/room"
 
 const processMap = (size: number) => {
     const grid: Room[][] = []
