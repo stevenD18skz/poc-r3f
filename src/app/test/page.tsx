@@ -50,6 +50,20 @@ export default function TestDashboard() {
       description: 'Mide la eficiencia de resolver eventos asincrónicos (APIs de IA) y alterar matrices continuas.',
       path: '/test/npc_ai',
       icon: '🐈'
+    },
+    {
+      id: 'physics_stress',
+      title: 'Estrés de Física (200 RigidBodies)',
+      description: 'Prueba de estrés de CPU/GPU mediante el procesamiento de transformaciones en tiempo real.',
+      path: '/test/physics_stress',
+      icon: '🪨'
+    },
+    {
+      id: 'vram_stress',
+      title: 'Estrés de Memoria (200 Texturas)',
+      description: 'Prueba de estrés de VRAM mediante el procesamiento de texturas en tiempo real.',
+      path: '/test/vram_stress',
+      icon: '💽'
     }
   ];
 
@@ -89,6 +103,7 @@ export default function TestDashboard() {
           <Link
             key={test.id}
             href={test.path}
+            target="_blank"
             className="group relative bg-white/5 backdrop-blur-xl border border-white/10 p-8 rounded-3xl transition-all duration-500 hover:bg-white/10 hover:border-white/20 hover:-translate-y-2 flex flex-col h-full"
           >
             <div className="text-4xl mb-6 group-hover:scale-110 transition-transform duration-500">
