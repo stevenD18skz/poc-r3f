@@ -36,7 +36,7 @@ export default function DebugTools() {
 
     return (
         <>
-            {showStats && <Stats key={statPanel} showPanel={statPanel} className="top-16! left-4!" />}
+            {showStats && <Stats key={statPanel} showPanel={statPanel} className="left-4!" />}
             {showPerf && (
                 <Suspense fallback={null}>
                     <PerfLazy position="bottom-left" />

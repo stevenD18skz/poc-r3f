@@ -3,7 +3,6 @@
 import { Canvas } from '@react-three/fiber'
 import { Suspense } from 'react'
 import { Environment, OrbitControls } from '@react-three/drei'
-import RoomGenerator from '@/components/gen/RoomGenerator'
 import PerformanceOverlay from '@/components/test/PerformanceOverlay'
 import DebugTools from '@/components/DebugTools'
 

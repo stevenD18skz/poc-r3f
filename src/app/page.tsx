@@ -21,7 +21,7 @@ export default function Home() {
   ]
 
   return (
-    <main className="min-h-screen bg-[#0a0a0a] text-white p-8 md:p-16 flex flex-col items-center justify-center font-sans overflow-hidden relative">
+    <main className="h-screen bg-[#0a0a0a] text-white p-8 md:p-16 flex flex-col items-center justify-center font-sans overflow-hidden relative">
       {/* Background Decorative Elements */}
       <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-600/20 blur-[120px] rounded-full pointer-events-none" />
       <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-purple-600/20 blur-[120px] rounded-full pointer-events-none" />
