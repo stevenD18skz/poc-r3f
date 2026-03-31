@@ -11,10 +11,10 @@ export default function Home() {
       cta: 'Ir al Laboratorio'
     },
     {
-      id: 'poc',
+      id: 'game',
       title: 'POC - Game Interactivo',
       description: 'Prueba de concepto funcional: exploración FPS en primera persona con generación procedural de habitaciones, física y mascotas.',
-      path: '/poc',
+      path: '/game',
       icon: '🎮',
       cta: 'Explorar la Casa'
     }
