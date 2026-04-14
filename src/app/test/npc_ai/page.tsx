@@ -7,51 +7,66 @@ import PerformanceOverlay from '@/components/test/PerformanceOverlay'
 import DebugTools from '@/components/DebugTools'
 import { OrbitControls, Text } from '@react-three/drei'
 
-// API Falsa que simula una IA devolviendo acciones basadas en algún contexto
-const simulateAiApi = async (): Promise<string> => {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      const actions = ['walk', 'idle', 'jump']
-      resolve(actions[Math.floor(Math.random() * actions.length)])
-    }, 1500) // Simula la latencia de una petición a OpenAI/Claude
-  })
-}
 
 function NpcCat() {
   const group = useRef<THREE.Group>(null!)
   const bodyRef = useRef<THREE.Mesh>(null!)
   const [action, setAction] = useState('idle')
+  const actionRef = useRef('idle')
   const [isThinking, setIsThinking] = useState(false)
   
   // Posición objetivo para caminar
   const targetPos = useRef(new THREE.Vector3(0, 0, 0))
 
   useEffect(() => {
+    let isActive = true;
+
     const aiLoop = async () => {
-      while (true) {
+      while (isActive) {
         setIsThinking(true)
-        const nextAction = await simulateAiApi()
         
-        setIsThinking(false)
-        setAction(nextAction)
-        
-        if (nextAction === 'walk') {
-            // Elige un nuevo punto aleatorio para caminar
-            targetPos.current.set(
-              (Math.random() - 0.5) * 10,
-              0,
-              (Math.random() - 0.5) * 10
-            )
+        try {
+          const currentPos = group.current ? { 
+            x: group.current.position.x, 
+            y: group.current.position.y, 
+            z: group.current.position.z 
+          } : { x: 0, y: 0, z: 0 };
+
+          const res = await fetch('/api/npc', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              currentAction: actionRef.current,
+              position: currentPos
+            })
+          })
+
+          if (res.ok && isActive) {
+            const data = await res.json()
+            const nextAction = data.action
+            
+            setAction(nextAction)
+            actionRef.current = nextAction
+            
+            if (nextAction === 'walk' && data.targetPosition) {
+              targetPos.current.set(data.targetPosition.x, 0, data.targetPosition.z)
+            }
+          }
+        } catch (error) {
+          console.error("Error communicating with AI API:", error)
         }
         
-        // Espera un rato antes de la siguiente "decisión"
-        await new Promise(r => setTimeout(r, 4000))
+        if (isActive) {
+          setIsThinking(false)
+          // Espera un rato antes de la siguiente "decisión"
+          await new Promise(r => setTimeout(r, 4000))
+        }
       }
     }
     
     aiLoop()
+    return () => { isActive = false }
   }, [])
-
   useFrame((state, delta) => {
     if (!group.current || !bodyRef.current) return
     const t = state.clock.getElapsedTime()
