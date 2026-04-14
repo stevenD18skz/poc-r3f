@@ -1,90 +1,98 @@
 'use client'
 
 import { Canvas, useFrame } from '@react-three/fiber'
-import { useRef, useMemo, useState } from 'react'
+import { useRef, useEffect, useState, Suspense, useMemo } from 'react'
 import * as THREE from 'three'
 import PerformanceOverlay from '@/components/test/PerformanceOverlay'
-import DebugTools, { useDebugControls } from '@/components/DebugTools'
-import { OrbitControls } from '@react-three/drei'
+import DebugTools from '@/components/DebugTools'
+import { OrbitControls, Sparkles, Environment } from '@react-three/drei'
 
-function RotatingTriangle({ position, color, rotationSpeed }: { position: [number, number, number], color: string, rotationSpeed: number }) {
-  const meshRef = useRef<THREE.Mesh>(null!)
+import Loader3D from '@/components/ui/Loader3D'
+
+function InstancedRotatingTriangles({ count = 1000 }) {
+  const meshRef = useRef<THREE.InstancedMesh>(null!)
+  const tempObject = new THREE.Object3D()
   
-  useFrame((state, delta) => {
-    meshRef.current.rotation.x += delta * rotationSpeed
-    meshRef.current.rotation.y += delta * (rotationSpeed / 2)
+  // Create static data for positions and rotation speeds
+  const particles = useMemo(() => {
+    const temp = []
+    for (let i = 0; i < count; i++) {
+        const radius = 10 + Math.random() * 15
+        const theta = Math.random() * Math.PI * 2
+        const phi = Math.random() * Math.PI
+        
+        const x = radius * Math.sin(phi) * Math.cos(theta)
+        const y = radius * Math.sin(phi) * Math.sin(theta)
+        const z = radius * Math.cos(phi)
+        
+        const rotationSpeed = (Math.random() - 0.5) * 2
+        const color = new THREE.Color(`hsl(${Math.random() * 50 + 200}, 80%, 50%)`)
+        
+        temp.push({ x, y, z, rotationSpeed, color })
+    }
+    return temp
+  }, [count])
+
+  // Initial setup: position and colors
+  useEffect(() => {
+    particles.forEach((p, i) => {
+      tempObject.position.set(p.x, p.y, p.z)
+      tempObject.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI)
+      tempObject.updateMatrix()
+      meshRef.current.setMatrixAt(i, tempObject.matrix)
+      meshRef.current.setColorAt(i, p.color)
+    })
+    meshRef.current.instanceMatrix.needsUpdate = true
+    if (meshRef.current.instanceColor) meshRef.current.instanceColor.needsUpdate = true
+  }, [particles, count])
+
+  // Individual rotation per frame
+  useFrame((state) => {
+    const t = state.clock.getElapsedTime()
+    particles.forEach((p, i) => {
+      tempObject.position.set(p.x, p.y, p.z)
+      // Rotate individually based on their speed and time
+      tempObject.rotation.set(
+        t * p.rotationSpeed,
+        t * (p.rotationSpeed / 2),
+        t * (p.rotationSpeed * 0.8)
+      )
+      tempObject.updateMatrix()
+      meshRef.current.setMatrixAt(i, tempObject.matrix)
+    })
+    meshRef.current.instanceMatrix.needsUpdate = true
   })
 
   return (
-    <mesh ref={meshRef} position={position}>
-      <coneGeometry args={[0.2, 0.4, 3]} />
-      <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.2} />
-    </mesh>
-  )
-}
-
-function TriangleScene({ numTriangles }: { numTriangles: number }) {
-  const triangles = (() => {
-    const list = []
-    for (let i = 0; i < numTriangles; i++) {
-      const theta = Math.random() * Math.PI * 2
-      const phi = Math.random() * Math.PI
-      const r = 5 + Math.random() * 5
-      
-      const x = r * Math.sin(phi) * Math.cos(theta)
-      const y = r * Math.sin(phi) * Math.sin(theta)
-      const z = r * Math.cos(phi)
-      
-      list.push({
-        position: [x, y, z] as [number, number, number],
-        color: `hsl(${Math.random() * 360}, 70%, 50%)`,
-        rotationSpeed: (Math.random() - 0.5) * 5
-      })
-    }
-    return list
-  })()
-
-  return (
-    <>
-      <ambientLight intensity={0.5} />
-      <pointLight position={[10, 10, 10]} intensity={1} />
-      {triangles.map((t, i) => (
-        <RotatingTriangle key={i} {...t} />
-      ))}
-    </>
+    <instancedMesh ref={meshRef} args={[null!, null!, count]}>
+      <coneGeometry args={[0.1, 0.2, 3]} />
+      <meshStandardMaterial />
+    </instancedMesh>
   )
 }
 
 export default function TrianglesRotatingTest() {
-  const { triangles } = useDebugControls()
-  const [count, setCount] = useState(1000)
+  const [count, setCount] = useState(32000)
 
   return (
-    <main className="w-full h-screen bg-[#050505] overflow-hidden">
-      <PerformanceOverlay title={`Triángulos Rotando (${count})`} />
-      
-      <div className="absolute top-24 right-8 z-50 bg-black/60 p-4 rounded-lg border border-white/10 text-white flex flex-col gap-2 backdrop-blur-sm">
-        <label className="text-sm font-mono text-white/80">Cantidad: {count.toLocaleString()}</label>
-        <input 
-          type="range" 
-          min="0" 
-          max="9" 
-          step="1" 
-          className="accent-indigo-500 cursor-pointer"
-          value={Math.log2(count / 1000)}
-          onChange={(e) => setCount(1000 * Math.pow(2, Number(e.target.value)))}
-        />
-      </div>
+    <main className="relative w-full h-screen bg-[#050505] overflow-hidden">
+      <PerformanceOverlay 
+        title={`${count} Triángulos Rotando`} 
+        input={true} 
+        count={count} 
+        setCount={setCount} 
+      />
 
-      <Canvas camera={{ position: [0, 0, 15], fov: 50 }}>
-          <DebugTools />
-          <OrbitControls makeDefault />
-          <TriangleScene numTriangles={count} />
+      <Canvas camera={{ position: [15, 15, 15], fov: 50 }}>
+          <DebugTools title="Triángulos Rotando" />
+
+          <Suspense fallback={<Loader3D />}>
+            <OrbitControls makeDefault />
+            <Environment preset="forest" background />
+            <Sparkles count={500} size={5} speed={0.5} scale={30} opacity={0.3} color="#ffffff" />
+            <InstancedRotatingTriangles count={count} />
+          </Suspense>
       </Canvas>
-
-      <div className="fixed bottom-0 left-0 w-full p-8 text-white/30 text-xs pointer-events-none text-center font-mono">
-        STRESS TEST - INDIVIDUAL MATRIX UPDATES - {count} OBJECTS
-      </div>
     </main>
   )
 }
