@@ -1,6 +1,6 @@
 // src/components/DebugTools.tsx
 import { Stats, Grid, GizmoHelper, GizmoViewport } from '@react-three/drei'
-import { useControls } from 'leva'
+import { useControls, button } from 'leva'
 import * as THREE from 'three'
 import { Suspense, lazy } from 'react'
 
@@ -27,7 +27,29 @@ export function useDebugControls() {
             max: 32_000,
             step: 1_000,
             label: 'Triángulos'
-        }
+        },
+        exportarCSV: button(() => {
+            // Genera la plantilla básica en CSV
+            const csvContent = "data:text/csv;charset=utf-8," 
+                + "Test Name,FPS Promedio,FPS 1% Low,Draw Calls,Memoria (MB),Triangulos\n"
+                + "Scene Idle,,,,,\n"
+                + "Triangles Static,,,,,\n"
+                + "Triangles Rotating,,,,,\n"
+                + "Dynamic Lights,,,,,\n"
+                + "Raycasting,,,,,\n"
+                + "Animation Stress,,,,,\n"
+                + "NPC AI,,,,,\n"
+                + "Physics Stress,,,,,\n"
+                + "VRAM Stress,,,,,\n";
+
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", "metricas_r3f_vs_babylon.csv");
+            document.body.appendChild(link); // Required for FF
+            link.click();
+            document.body.removeChild(link);
+        })
     })
 }
 

@@ -64,20 +64,18 @@ export default function VramStressTest() {
 
       {/* Control Manual para aumentar VRAM */}
       <div className="fixed top-8 right-8 z-50 bg-black/80 backdrop-blur-xl border border-white/10 p-6 rounded-3xl flex flex-col gap-4">
-        <label className="text-gray-400 text-xs uppercase tracking-widest font-bold">Carga de VRAM (Lento)</label>
-        <div className="flex gap-2">
-            {[20, 50, 100].map(n => (
-                <button 
-                  key={n}
-                  onClick={() => setNumTextures(n)}
-                  className={`px-4 py-2 rounded-xl transition-all ${numTextures === n ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30' : 'bg-white/5 hover:bg-white/10 text-gray-400'}`}
-                >
-                    {n} Texturas
-                </button>
-            ))}
-        </div>
+        <label className="text-gray-400 text-xs uppercase tracking-widest font-bold">Carga de VRAM: {numTextures.toLocaleString()} Texturas</label>
+        <input 
+          type="range" 
+          min="0" 
+          max="7" 
+          step="1" 
+          className="accent-indigo-500 cursor-pointer"
+          value={Math.log2(numTextures / 10)}
+          onChange={(e) => setNumTextures(10 * Math.pow(2, Number(e.target.value)))}
+        />
         <p className="text-[10px] text-gray-500 italic max-w-xs leading-tight">
-          Cada botón carga más texturas únicas en el GPU. 100 texturas de 1K pueden ocupar aprox. ~400MB-600MB de VRAM.
+          Cada incremento carga texturas de 1K únicas en GPU, consumiendo alta VRAM progresivamente.
         </p>
       </div>
 

@@ -58,7 +58,7 @@ function RaycastScene({ count, onHit }: { count: number, onHit: (i: number) => v
 
 export default function RaycastTest() {
   const [hitCount, setHitCount] = useState(0)
-  const totalObjects = 500
+  const [count, setCount] = useState(500)
 
   const handleHit = useCallback((i: number) => {
     setHitCount((prev) => prev + 1)
@@ -66,12 +66,25 @@ export default function RaycastTest() {
 
   return (
     <main className="w-full h-screen bg-[#050505] overflow-hidden">
-      <PerformanceOverlay title={`Raycasting: ${totalObjects} Objetos Interactivos`} />
+      <PerformanceOverlay title={`Raycasting: ${count} Objetos Interactivos`} />
+
+      <div className="absolute top-24 right-6 z-50 bg-black/80 p-4 rounded-2xl border border-white/10 text-white flex flex-col gap-2 backdrop-blur-sm">
+        <label className="text-sm font-mono text-white/80">Cantidad: {count.toLocaleString()}</label>
+        <input 
+          type="range" 
+          min="0" 
+          max="8" 
+          step="1" 
+          className="accent-indigo-500 cursor-pointer"
+          value={Math.log2(count / 125)}
+          onChange={(e) => setCount(125 * Math.pow(2, Number(e.target.value)))}
+        />
+      </div>
 
       {/* Hit Counter */}
       <div className="fixed top-6 right-6 z-50 bg-black/80 backdrop-blur-xl border border-white/10 px-6 py-4 rounded-2xl">
         <p className="text-gray-400 text-xs uppercase tracking-widest mb-1">Objetos Clickeados</p>
-        <p className="text-3xl font-mono font-black text-emerald-400">{hitCount} <span className="text-gray-500 text-sm">/ {totalObjects}</span></p>
+        <p className="text-3xl font-mono font-black text-emerald-400">{hitCount} <span className="text-gray-500 text-sm">/ {count}</span></p>
       </div>
 
       <Canvas camera={{ position: [0, 20, 20], fov: 50 }} raycaster={{ params: {
@@ -85,11 +98,11 @@ export default function RaycastTest() {
       } }}>
         <DebugTools />
         <OrbitControls makeDefault />
-        <RaycastScene count={totalObjects} onHit={handleHit} />
+        <RaycastScene count={count} onHit={handleHit} />
       </Canvas>
 
       <div className="fixed bottom-0 left-0 w-full p-8 text-white/30 text-xs pointer-events-none text-center font-mono">
-        EVENT SYSTEM STRESS - POINTER RAYCASTING ON {totalObjects} OBJECTS
+        EVENT SYSTEM STRESS - POINTER RAYCASTING ON {count} OBJECTS
       </div>
     </main>
   )

@@ -1,7 +1,7 @@
 'use client'
 
 import { Canvas, useFrame } from '@react-three/fiber'
-import { useRef, useMemo, useEffect } from 'react'
+import { useRef, useMemo, useEffect, useState } from 'react'
 import * as THREE from 'three'
 import PerformanceOverlay from '@/components/test/PerformanceOverlay'
 import DebugTools, { useDebugControls } from '@/components/DebugTools'
@@ -50,11 +50,25 @@ function InstancedTriangles({ count = 10000 }) {
 
 export default function TrianglesStaticTest() {
   const { triangles } = useDebugControls()
+  const [count, setCount] = useState(1000)
 
   return (
     <main className="w-full h-screen bg-[#050505] overflow-hidden">
-      <PerformanceOverlay title={`${512_000} Triángulos Estáticos`} />
+      <PerformanceOverlay title={`${count} Triángulos Estáticos`} />
       
+      <div className="absolute top-24 right-8 z-50 bg-black/60 p-4 rounded-lg border border-white/10 text-white flex flex-col gap-2 backdrop-blur-sm">
+        <label className="text-sm font-mono text-white/80">Cantidad: {count.toLocaleString()}</label>
+        <input 
+          type="range" 
+          min="0" 
+          max="9" 
+          step="1" 
+          className="accent-indigo-500 cursor-pointer"
+          value={Math.log2(count / 1000)}
+          onChange={(e) => setCount(1000 * Math.pow(2, Number(e.target.value)))}
+        />
+      </div>
+
       <Canvas camera={{ position: [20, 20, 20], fov: 50 }}>
           <DebugTools />
           <OrbitControls makeDefault autoRotate autoRotateSpeed={0.5} />
@@ -64,7 +78,7 @@ export default function TrianglesStaticTest() {
           <pointLight position={[-10, -10, -10]} intensity={1} color="#9333ea" />
           
           <Sparkles count={500} size={5} speed={0.5} scale={30} opacity={0.3} color="#ffffff" />
-          <InstancedTriangles count={512_000} />
+          <InstancedTriangles count={count} />
       </Canvas>
 
       <div className="fixed bottom-0 left-0 w-full p-8 text-white/30 text-xs pointer-events-none text-center font-mono">

@@ -1,7 +1,7 @@
 'use client'
 
 import { Canvas, useFrame } from '@react-three/fiber'
-import { useRef, useMemo } from 'react'
+import { useRef, useMemo, useState } from 'react'
 import * as THREE from 'three'
 import PerformanceOverlay from '@/components/test/PerformanceOverlay'
 import DebugTools, { useDebugControls } from '@/components/DebugTools'
@@ -57,19 +57,33 @@ function TriangleScene({ numTriangles }: { numTriangles: number }) {
 
 export default function TrianglesRotatingTest() {
   const { triangles } = useDebugControls()
+  const [count, setCount] = useState(1000)
 
   return (
     <main className="w-full h-screen bg-[#050505] overflow-hidden">
-      <PerformanceOverlay title={`Triángulos Rotando (${triangles})`} />
+      <PerformanceOverlay title={`Triángulos Rotando (${count})`} />
       
+      <div className="absolute top-24 right-8 z-50 bg-black/60 p-4 rounded-lg border border-white/10 text-white flex flex-col gap-2 backdrop-blur-sm">
+        <label className="text-sm font-mono text-white/80">Cantidad: {count.toLocaleString()}</label>
+        <input 
+          type="range" 
+          min="0" 
+          max="9" 
+          step="1" 
+          className="accent-indigo-500 cursor-pointer"
+          value={Math.log2(count / 1000)}
+          onChange={(e) => setCount(1000 * Math.pow(2, Number(e.target.value)))}
+        />
+      </div>
+
       <Canvas camera={{ position: [0, 0, 15], fov: 50 }}>
           <DebugTools />
           <OrbitControls makeDefault />
-          <TriangleScene numTriangles={triangles} />
+          <TriangleScene numTriangles={count} />
       </Canvas>
 
       <div className="fixed bottom-0 left-0 w-full p-8 text-white/30 text-xs pointer-events-none text-center font-mono">
-        STRESS TEST - INDIVIDUAL MATRIX UPDATES - {triangles} OBJECTS
+        STRESS TEST - INDIVIDUAL MATRIX UPDATES - {count} OBJECTS
       </div>
     </main>
   )

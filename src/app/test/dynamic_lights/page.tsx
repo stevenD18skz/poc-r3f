@@ -1,7 +1,7 @@
 'use client'
 
 import { Canvas, useFrame } from '@react-three/fiber'
-import { useRef, useMemo } from 'react'
+import { useRef, useMemo, useState } from 'react'
 import * as THREE from 'three'
 import PerformanceOverlay from '@/components/test/PerformanceOverlay'
 import DebugTools from '@/components/DebugTools'
@@ -132,7 +132,7 @@ function AnimalHerd({ count }: { count: number }) {
   )
 }
 
-function ExhaustiveDynamicLightsScene() {
+function ExhaustiveDynamicLightsScene({ animalCount = 100 }: { animalCount?: number }) {
   return (
     <>
     <ambientLight intensity={3}  />
@@ -169,16 +169,34 @@ function ExhaustiveDynamicLightsScene() {
 
       <DetailedFloor />
       
-      {/* 100 Animales arrojando y recibiendo sombras complejas */}
-      <AnimalHerd count={100} />
+      {/* Animales arrojando y recibiendo sombras complejas */}
+      <AnimalHerd count={animalCount} />
     </>
   )
 }
 
 export default function DynamicLightsTest() {
+  const [count, setCount] = useState(100)
+
   return (
     <main className="w-full h-screen bg-[#050505] overflow-hidden">
-      <PerformanceOverlay title="ILUMINACIÓN EXHAUSTIVA: Múltiples Luces y Sombras" />
+      <PerformanceOverlay title={`ILUMINACIÓN EXHAUSTIVA: ${count} Geometrías`} />
+
+      <div className="absolute top-24 right-8 z-50 bg-black/60 p-4 rounded-lg border border-white/10 text-white flex flex-col gap-2 backdrop-blur-sm">
+        <label className="text-sm font-mono text-white/80">Carga: {count.toLocaleString()}</label>
+        <input 
+          type="range" 
+          min="0" 
+          max="8" 
+          step="1" 
+          className="accent-indigo-500 cursor-pointer"
+          value={Math.log2(count / 25)}
+          onChange={(e) => setCount(25 * Math.pow(2, Number(e.target.value)))}
+        />
+        <p className="text-[10px] text-gray-500 italic max-w-[150px] leading-tight">
+          Calcula sombras por objeto
+        </p>
+      </div>
 
       <Canvas camera={{ position: [0, 20, 35], fov: 50 }} shadows>
         <DebugTools />
@@ -186,7 +204,7 @@ export default function DynamicLightsTest() {
         <SoftShadows size={15} samples={10} focus={0.5} />
         
         <OrbitControls makeDefault maxPolarAngle={Math.PI / 2 - 0.05} />
-        <ExhaustiveDynamicLightsScene />
+        <ExhaustiveDynamicLightsScene animalCount={count} />
       </Canvas>
 
       <div className="fixed bottom-0 left-0 w-full p-8 text-white/30 text-xs pointer-events-none text-center font-mono z-50">
