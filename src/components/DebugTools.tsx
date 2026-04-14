@@ -3,12 +3,16 @@ import { Stats, Grid, GizmoHelper, GizmoViewport } from '@react-three/drei'
 import { useControls, button } from 'leva'
 import * as THREE from 'three'
 import { Suspense, lazy } from 'react'
+import { useThree } from '@react-three/fiber'
+import { getPerf } from 'r3f-perf'
 
 // Carga dinámica de r3f-perf para evitar error de Turbopack con .woff
 const PerfLazy = lazy(() => import('r3f-perf').then(mod => ({ default: mod.Perf })))
 
 // Hook para crear el contexto de debug
 export function useDebugControls() {
+    const { gl } = useThree()
+
     return useControls('Debug', {
         showAxes: true,
         showGrid: true,
@@ -29,23 +33,31 @@ export function useDebugControls() {
             label: 'Triángulos'
         },
         exportarCSV: button(() => {
-            // Genera la plantilla básica en CSV
+            const perfState = getPerf ? getPerf() : null;
+            const logData = perfState?.log || { gpu: 0, cpu: 0, mem: 0, fps: 0 };
+            
+            // WebGL renderer metrics
+            const calls = gl.info.render.calls;
+            const renderTriangles = gl.info.render.triangles;
+            const points = gl.info.render.points;
+            const lines = gl.info.render.lines;
+            const geometries = gl.info.memory.geometries;
+            const textures = gl.info.memory.textures;
+            const shaders = gl.info.programs ? gl.info.programs.length : 0;
+
+            const gpuMs = logData.gpu.toFixed(2);
+            const cpuMs = logData.cpu.toFixed(2);
+            const fpsAvg = logData.fps.toFixed(2);
+            const memMB = logData.mem.toFixed(2);
+
             const csvContent = "data:text/csv;charset=utf-8," 
-                + "Test Name,FPS Promedio,FPS 1% Low,Draw Calls,Memoria (MB),Triangulos\n"
-                + "Scene Idle,,,,,\n"
-                + "Triangles Static,,,,,\n"
-                + "Triangles Rotating,,,,,\n"
-                + "Dynamic Lights,,,,,\n"
-                + "Raycasting,,,,,\n"
-                + "Animation Stress,,,,,\n"
-                + "NPC AI,,,,,\n"
-                + "Physics Stress,,,,,\n"
-                + "VRAM Stress,,,,,\n";
+                + "Escena,FPS Promedio,GPU (ms),CPU (ms),Draw Calls,Triangulos,Geometrias,Texturas,Shaders,Lineas,Puntos,Memoria RAM (MB)\n"
+                + `Metricas Actuales,${fpsAvg},${gpuMs},${cpuMs},${calls},${renderTriangles},${geometries},${textures},${shaders},${lines},${points},${memMB}\n`;
 
             const encodedUri = encodeURI(csvContent);
             const link = document.createElement("a");
             link.setAttribute("href", encodedUri);
-            link.setAttribute("download", "metricas_r3f_vs_babylon.csv");
+            link.setAttribute("download", "metricas_escena.csv");
             document.body.appendChild(link); // Required for FF
             link.click();
             document.body.removeChild(link);
