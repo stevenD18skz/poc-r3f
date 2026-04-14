@@ -16,7 +16,7 @@ export default function PerformanceOverlay({
   return (
     <div className="fixed top-0 left-0 w-full h-full pointer-events-none z-50 p-6 flex justify-start items-start text-left">
       {/* Panel Único Consolidado en la Izquierda */}
-      <div className="bg-black/85 backdrop-blur-2xl border border-white/10 p-1 rounded-[1.5rem] pointer-events-auto shadow-[0_20px_50px_rgba(0,0,0,0.5)] ring-1 ring-white/10 w-80 overflow-hidden flex flex-col transition-all duration-500 ease-in-out">
+      <div className="bg-black/85 backdrop-blur-2xl border border-white/10 p-1 rounded-3xl pointer-events-auto shadow-[0_20px_50px_rgba(0,0,0,0.5)] ring-1 ring-white/10 w-80 overflow-hidden flex flex-col transition-all duration-500 ease-in-out">
         
         {/* Superior: Botón Volver integrado */}
         <div className="p-2 border-b border-white/5">

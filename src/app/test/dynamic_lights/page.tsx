@@ -1,10 +1,11 @@
 'use client'
 
 import { Canvas, useFrame } from '@react-three/fiber'
-import { useRef, useMemo, useState } from 'react'
+import { useRef, useMemo, useState, Suspense } from 'react'
 import * as THREE from 'three'
 import PerformanceOverlay from '@/components/test/PerformanceOverlay'
 import DebugTools from '@/components/DebugTools'
+import Loader3D from '@/components/ui/Loader3D'
 import { OrbitControls, SoftShadows, Box, Sphere, Torus, Cylinder } from '@react-three/drei'
 
 // Animación de Luces Puntuales (PointLights)
@@ -179,37 +180,23 @@ export default function DynamicLightsTest() {
   const [count, setCount] = useState(100)
 
   return (
-    <main className="w-full h-screen bg-[#050505] overflow-hidden">
-      <PerformanceOverlay title={`ILUMINACIÓN EXHAUSTIVA: ${count} Geometrías`} />
-
-      <div className="absolute top-24 right-8 z-50 bg-black/60 p-4 rounded-lg border border-white/10 text-white flex flex-col gap-2 backdrop-blur-sm">
-        <label className="text-sm font-mono text-white/80">Carga: {count.toLocaleString()}</label>
-        <input 
-          type="range" 
-          min="0" 
-          max="8" 
-          step="1" 
-          className="accent-indigo-500 cursor-pointer"
-          value={Math.log2(count / 25)}
-          onChange={(e) => setCount(25 * Math.pow(2, Number(e.target.value)))}
-        />
-        <p className="text-[10px] text-gray-500 italic max-w-[150px] leading-tight">
-          Calcula sombras por objeto
-        </p>
-      </div>
+    <main className="relative w-full h-screen bg-[#050505] overflow-hidden">
+      <PerformanceOverlay 
+        title={`Iluminación: ${count} Geometrías`} 
+        input={true} 
+        count={count} 
+        setCount={setCount} 
+      />
 
       <Canvas camera={{ position: [0, 20, 35], fov: 50 }} shadows>
-        <DebugTools />
-        {/* SoftShadows incrementa drásticamente el costo de cálculo de sombras para la GPU */}
-        <SoftShadows size={15} samples={10} focus={0.5} />
-        
-        <OrbitControls makeDefault maxPolarAngle={Math.PI / 2 - 0.05} />
-        <ExhaustiveDynamicLightsScene animalCount={count} />
+        <DebugTools title="Iluminación Dinámica" />
+        <Suspense fallback={<Loader3D />}>
+          <SoftShadows size={15} samples={10} focus={0.5} />
+          
+          <OrbitControls makeDefault maxPolarAngle={Math.PI / 2 - 0.05} />
+          <ExhaustiveDynamicLightsScene animalCount={count} />
+        </Suspense>
       </Canvas>
-
-      <div className="fixed bottom-0 left-0 w-full p-8 text-white/30 text-xs pointer-events-none text-center font-mono z-50">
-        GPU STRESS - DIRECTIONAL + SPOTLIGHTS + POINTLIGHTS + SOFTSHADOWS ON 200 COMPLEX GEOMETRIES
-      </div>
     </main>
   )
 }

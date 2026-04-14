@@ -1,10 +1,11 @@
 'use client'
 
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
-import { useRef, useMemo, useState, useEffect } from 'react'
+import { useRef, useMemo, useState, useEffect, Suspense } from 'react'
 import * as THREE from 'three'
 import PerformanceOverlay from '@/components/test/PerformanceOverlay'
 import DebugTools from '@/components/DebugTools'
+import Loader3D from '@/components/ui/Loader3D'
 import { OrbitControls, Environment } from '@react-three/drei'
 
 function AnimatedSphere({ position, delay }: { position: [number, number, number], delay: number }) {
@@ -62,19 +63,24 @@ function AnimationScene({ count }: { count: number }) {
 }
 
 export default function AnimationStressTest() {
+  const [count, setCount] = useState(2000)
+
   return (
-    <main className="w-full h-screen bg-[#050505] overflow-hidden">
-      <PerformanceOverlay title="500 Objetos Animados (useFrame)" />
+    <main className="relative w-full h-screen bg-[#050505] overflow-hidden">
+      <PerformanceOverlay 
+        title={`${count} Objetos Animados`} 
+        input={true} 
+        count={count} 
+        setCount={setCount} 
+      />
 
       <Canvas camera={{ position: [0, 15, 25], fov: 50 }}>
-        <DebugTools />
-        <OrbitControls makeDefault />
-        <AnimationScene count={2000} />
+        <DebugTools title="Animación (useFrame)" />
+        <Suspense fallback={<Loader3D />}>
+          <OrbitControls makeDefault />
+          <AnimationScene count={count} />
+        </Suspense>
       </Canvas>
-
-      <div className="fixed bottom-0 left-0 w-full p-8 text-white/30 text-xs pointer-events-none text-center font-mono">
-        ANIMATION LOOP STRESS - useFrame() ON 500 INDIVIDUAL REFS
-      </div>
     </main>
   )
 }

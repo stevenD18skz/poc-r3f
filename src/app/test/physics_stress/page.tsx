@@ -1,10 +1,11 @@
 'use client'
 
 import { Canvas, useFrame } from '@react-three/fiber'
-import { useState, useMemo, useRef } from 'react'
+import { useState, useMemo, useRef, Suspense } from 'react'
 import { Physics, RigidBody, CuboidCollider } from '@react-three/rapier'
 import PerformanceOverlay from '@/components/test/PerformanceOverlay'
 import DebugTools from '@/components/DebugTools'
+import Loader3D from '@/components/ui/Loader3D'
 import { OrbitControls, Environment } from '@react-three/drei'
 
 function FallingObjects({ count }: { count: number }) {
@@ -32,42 +33,47 @@ function FallingObjects({ count }: { count: number }) {
 }
 
 export default function PhysicsStressTest() {
+  const [count, setCount] = useState(200)
+
   return (
-    <main className="w-full h-screen bg-[#050505] overflow-hidden">
-      <PerformanceOverlay title="Estrés de Física (200 RigidBodies)" />
+    <main className="relative w-full h-screen bg-[#050505] overflow-hidden">
+      <PerformanceOverlay 
+        title={`Estrés de Física: ${count} Objetos`} 
+        input={true} 
+        count={count} 
+        setCount={setCount} 
+      />
 
       <Canvas shadows camera={{ position: [15, 15, 15], fov: 45 }}>
-        <DebugTools />
-        <OrbitControls makeDefault />
-        <Environment preset="city" />
-        <ambientLight intensity={0.5} />
-        <directionalLight position={[10, 10, 10]} intensity={1.5} castShadow />
+        <DebugTools title="Estrés de Física" />
+        <Suspense fallback={<Loader3D />}>
+          <OrbitControls makeDefault />
+          <Environment preset="city" />
+          <ambientLight intensity={0.5} />
+          <directionalLight position={[10, 10, 10]} intensity={1.5} castShadow />
 
-        <Physics gravity={[0, -9.81, 0]}>
-          <FallingObjects count={200} />
-          
-          {/* Suelo Kinematic */}
-          <RigidBody type="fixed">
-            <mesh receiveShadow rotation={[-Math.PI / 2, 0, 0]}>
-              <planeGeometry args={[30, 30]} />
-              <meshStandardMaterial color="#222" />
-            </mesh>
-            <CuboidCollider args={[15, 0.1, 15]} />
-          </RigidBody>
-          
-          {/* Paredes Invisibles para contener los objetos */}
-          <RigidBody type="fixed">
-             <CuboidCollider args={[15, 10, 0.1]} position={[0, 5, 15]} />
-             <CuboidCollider args={[15, 10, 0.1]} position={[0, 5, -15]} />
-             <CuboidCollider args={[0.1, 10, 15]} position={[15, 5, 0]} />
-             <CuboidCollider args={[0.1, 10, 15]} position={[-15, 5, 0]} />
-          </RigidBody>
-        </Physics>
+          <Physics gravity={[0, -9.81, 0]}>
+            <FallingObjects count={count} />
+            
+            {/* Suelo Kinematic */}
+            <RigidBody type="fixed">
+              <mesh receiveShadow rotation={[-Math.PI / 2, 0, 0]}>
+                <planeGeometry args={[30, 30]} />
+                <meshStandardMaterial color="#222" />
+              </mesh>
+              <CuboidCollider args={[15, 0.1, 15]} />
+            </RigidBody>
+            
+            {/* Paredes Invisibles para contener los objetos */}
+            <RigidBody type="fixed">
+               <CuboidCollider args={[15, 10, 0.1]} position={[0, 5, 15]} />
+               <CuboidCollider args={[15, 10, 0.1]} position={[0, 5, -15]} />
+               <CuboidCollider args={[0.1, 10, 15]} position={[15, 5, 0]} />
+               <CuboidCollider args={[0.1, 10, 15]} position={[-15, 5, 0]} />
+            </RigidBody>
+          </Physics>
+        </Suspense>
       </Canvas>
-
-      <div className="fixed bottom-0 left-0 w-full p-8 text-white/30 text-xs pointer-events-none text-center font-mono">
-        CPU/WASM STRESS - RAPIER PHYSICS ENGINE WITH 200 INTERACTING RIGIDBODIES
-      </div>
     </main>
   )
 }

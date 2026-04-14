@@ -5,6 +5,8 @@ import { useState, useMemo, useRef, Suspense } from 'react'
 import * as THREE from 'three'
 import PerformanceOverlay from '@/components/test/PerformanceOverlay'
 import DebugTools from '@/components/DebugTools'
+import Loader3D from '@/components/ui/Loader3D'
+import DebugTools from '@/components/DebugTools'
 import { OrbitControls, Environment, Sphere, Text } from '@react-three/drei'
 
 // Generador de texturas procedurales pesadas para simular VRAM
@@ -59,37 +61,21 @@ export default function VramStressTest() {
   const [numTextures, setNumTextures] = useState(20)
 
   return (
-    <main className="w-full h-screen bg-[#050505] overflow-hidden">
-      <PerformanceOverlay title={`Estrés de Memoria: ${numTextures} Textura(s) 1K`} />
-
-      {/* Control Manual para aumentar VRAM */}
-      <div className="fixed top-8 right-8 z-50 bg-black/80 backdrop-blur-xl border border-white/10 p-6 rounded-3xl flex flex-col gap-4">
-        <label className="text-gray-400 text-xs uppercase tracking-widest font-bold">Carga de VRAM: {numTextures.toLocaleString()} Texturas</label>
-        <input 
-          type="range" 
-          min="0" 
-          max="7" 
-          step="1" 
-          className="accent-indigo-500 cursor-pointer"
-          value={Math.log2(numTextures / 10)}
-          onChange={(e) => setNumTextures(10 * Math.pow(2, Number(e.target.value)))}
-        />
-        <p className="text-[10px] text-gray-500 italic max-w-xs leading-tight">
-          Cada incremento carga texturas de 1K únicas en GPU, consumiendo alta VRAM progresivamente.
-        </p>
-      </div>
+    <main className="relative w-full h-screen bg-[#050505] overflow-hidden">
+      <PerformanceOverlay 
+        title={`Estrés VRAM: ${numTextures} Texturas 1K`} 
+        input={true} 
+        count={numTextures} 
+        setCount={setNumTextures} 
+      />
 
       <Canvas camera={{ position: [0, 0, 30], fov: 45 }}>
-        <DebugTools />
-        <OrbitControls makeDefault autoRotate autoRotateSpeed={0.5} />
-        <Suspense fallback={null}>
+        <DebugTools title="Estrés de VRAM" />
+        <Suspense fallback={<Loader3D />}>
+          <OrbitControls makeDefault autoRotate autoRotateSpeed={0.5} />
           <VramManager numTextures={numTextures} />
         </Suspense>
       </Canvas>
-
-      <div className="fixed bottom-0 left-0 w-full p-8 text-white/30 text-xs pointer-events-none text-center font-mono">
-        GPU VRAM STRESS - CUSTOM CANVAS TEXTURE ALLOCATION PER OBJECT
-      </div>
     </main>
   )
 }

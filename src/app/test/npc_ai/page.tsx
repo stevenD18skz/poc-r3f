@@ -1,10 +1,11 @@
 'use client'
 
 import { Canvas, useFrame } from '@react-three/fiber'
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, Suspense } from 'react'
 import * as THREE from 'three'
 import PerformanceOverlay from '@/components/test/PerformanceOverlay'
 import DebugTools from '@/components/DebugTools'
+import Loader3D from '@/components/ui/Loader3D'
 import { OrbitControls, Text } from '@react-three/drei'
 
 
@@ -149,22 +150,20 @@ function Paddock() {
 
 export default function NpcAiTest() {
   return (
-    <main className="w-full h-screen bg-[#050505] overflow-hidden">
-      <PerformanceOverlay title="Simulación NPC + IA Contextual" />
+    <main className="relative w-full h-screen bg-[#050505] overflow-hidden">
+      <PerformanceOverlay title="Simulación NPC + IA Contextual" input={false} />
 
       <Canvas camera={{ position: [0, 8, 15], fov: 50 }}>
-        <DebugTools />
-        <OrbitControls makeDefault maxPolarAngle={Math.PI / 2 - 0.1} />
-        <ambientLight intensity={0.5} />
-        <directionalLight position={[10, 10, 10]} intensity={2} castShadow />
-        
-        <Paddock />
-        <NpcCat />
+        <DebugTools title="Simulación NPC" />
+        <Suspense fallback={<Loader3D />}>
+          <OrbitControls makeDefault maxPolarAngle={Math.PI / 2 - 0.1} />
+          <ambientLight intensity={0.5} />
+          <directionalLight position={[10, 10, 10]} intensity={2} castShadow />
+          
+          <Paddock />
+          <NpcCat />
+        </Suspense>
       </Canvas>
-
-      <div className="fixed bottom-0 left-0 w-full p-8 text-white/30 text-xs pointer-events-none text-center font-mono">
-        ASYNC LOGIC STRESS - PROMISE RESOLUTION IN RENDER LOOP
-      </div>
     </main>
   )
 }

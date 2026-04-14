@@ -1,10 +1,11 @@
 'use client'
 
 import { Canvas } from '@react-three/fiber'
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, Suspense } from 'react'
 import * as THREE from 'three'
 import PerformanceOverlay from '@/components/test/PerformanceOverlay'
 import DebugTools from '@/components/DebugTools'
+import Loader3D from '@/components/ui/Loader3D'
 import { OrbitControls, Text } from '@react-three/drei'
 
 function InteractiveBox({ position, index, onHit }: { position: [number, number, number], index: number, onHit: (i: number) => void }) {
@@ -65,21 +66,13 @@ export default function RaycastTest() {
   }, [])
 
   return (
-    <main className="w-full h-screen bg-[#050505] overflow-hidden">
-      <PerformanceOverlay title={`Raycasting: ${count} Objetos Interactivos`} />
-
-      <div className="absolute top-24 right-6 z-50 bg-black/80 p-4 rounded-2xl border border-white/10 text-white flex flex-col gap-2 backdrop-blur-sm">
-        <label className="text-sm font-mono text-white/80">Cantidad: {count.toLocaleString()}</label>
-        <input 
-          type="range" 
-          min="0" 
-          max="8" 
-          step="1" 
-          className="accent-indigo-500 cursor-pointer"
-          value={Math.log2(count / 125)}
-          onChange={(e) => setCount(125 * Math.pow(2, Number(e.target.value)))}
-        />
-      </div>
+    <main className="relative w-full h-screen bg-[#050505] overflow-hidden">
+      <PerformanceOverlay 
+        title={`Raycasting: ${count} Objetos`} 
+        input={true} 
+        count={count} 
+        setCount={setCount} 
+      />
 
       {/* Hit Counter */}
       <div className="fixed top-6 right-6 z-50 bg-black/80 backdrop-blur-xl border border-white/10 px-6 py-4 rounded-2xl">
@@ -91,19 +84,15 @@ export default function RaycastTest() {
         Line: { threshold: 0.1 },
         Mesh: undefined,
         LOD: undefined,
-        Points: {
-          threshold: 0
-        },
+        Points: { threshold: 0 },
         Sprite: undefined
       } }}>
-        <DebugTools />
-        <OrbitControls makeDefault />
-        <RaycastScene count={count} onHit={handleHit} />
+        <DebugTools title="Raycasting Eventos" />
+        <Suspense fallback={<Loader3D />}>
+          <OrbitControls makeDefault />
+          <RaycastScene count={count} onHit={handleHit} />
+        </Suspense>
       </Canvas>
-
-      <div className="fixed bottom-0 left-0 w-full p-8 text-white/30 text-xs pointer-events-none text-center font-mono">
-        EVENT SYSTEM STRESS - POINTER RAYCASTING ON {count} OBJECTS
-      </div>
     </main>
   )
 }
