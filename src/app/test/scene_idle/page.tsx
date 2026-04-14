@@ -5,6 +5,7 @@ import { Suspense } from 'react'
 import { Environment, OrbitControls } from '@react-three/drei'
 import PerformanceOverlay from '@/components/test/PerformanceOverlay'
 import DebugTools from '@/components/DebugTools'
+import Loader3D from '@/components/ui/Loader3D'
 
 export default function SceneIdleTest() {
   return (
@@ -16,23 +17,16 @@ export default function SceneIdleTest() {
         shadows
         gl={{ antialias: true }}
       >
-        <DebugTools />
-        
-        <OrbitControls enablePan={false} enableZoom={false} enableRotate={false} />
-        
-        <ambientLight intensity={0.5} />
-        <spotLight position={[10, 10, 10]} angle={0.15} penumbra={1} intensity={2} castShadow />
-        
-        <Environment preset="forest" background />
-        
-        <Suspense fallback={null}>
-          
-        </Suspense>
-      </Canvas>
+        <DebugTools title="Escena Idle (60s)" />
 
-      <div className="fixed bottom-0 left-0 w-full p-8 text-white/10 text-[10px] pointer-events-none text-center font-mono">
-        STABLE MAPPED GEOMETRY - IDLE NO-INPUT MODE
-      </div>
+        <Suspense fallback={<Loader3D />}> 
+          <OrbitControls makeDefault autoRotate autoRotateSpeed={0.5} />
+          <ambientLight intensity={0.5} />
+          <spotLight position={[10, 10, 10]} angle={0.15} penumbra={1} intensity={2} castShadow />
+          <Environment preset="forest" background />
+        </Suspense>
+
+      </Canvas>
     </main>
   )
 }

@@ -10,12 +10,11 @@ import { getPerf } from 'r3f-perf'
 const PerfLazy = lazy(() => import('r3f-perf').then(mod => ({ default: mod.Perf })))
 
 // Hook para crear el contexto de debug
-export function useDebugControls() {
+export function useDebugControls({title}: {title?: string}) {
     const { gl } = useThree()
 
     return useControls('Debug', {
-        showAxes: true,
-        showGrid: true,
+        freeCam: false,
         showStats: true,
         statPanel: { 
             value: 0, 
@@ -24,14 +23,14 @@ export function useDebugControls() {
         },
         showPerf: true,
         showGizmo: true,
-        freeCam: true,
-        triangles: {
-            value: 1_000,
-            min: 1_000,
-            max: 32_000,
-            step: 1_000,
-            label: 'Triángulos'
-        },
+        showGrid: false,
+        //triangles: {
+            //value: 1_000,
+            //min: 1_000,
+            //max: 32_000,
+            //step: 1_000,
+            //label: 'Triángulos'
+        //},
         exportarCSV: button(() => {
             const perfState = getPerf ? getPerf() : null;
             const logData = perfState?.log || { gpu: 0, cpu: 0, mem: 0, fps: 0 };
@@ -57,7 +56,7 @@ export function useDebugControls() {
             const encodedUri = encodeURI(csvContent);
             const link = document.createElement("a");
             link.setAttribute("href", encodedUri);
-            link.setAttribute("download", "metricas_escena.csv");
+            link.setAttribute("download", `metricas_escena_${title}.csv`);
             document.body.appendChild(link); // Required for FF
             link.click();
             document.body.removeChild(link);
@@ -65,12 +64,12 @@ export function useDebugControls() {
     })
 }
 
-export default function DebugTools() {
-    const { showAxes, showGrid, showStats, statPanel, showGizmo, showPerf, triangles } = useDebugControls()
+export default function DebugTools({title}: {title: string}) {
+    const { showAxes, showGrid, showStats, statPanel, showGizmo, showPerf } = useDebugControls({title})
 
     return (
         <>
-            {showStats && <Stats key={statPanel} showPanel={statPanel} className="left-4!" />}
+            {showStats && <Stats key={statPanel} showPanel={statPanel} />}
             {showPerf && (
                 <Suspense fallback={null}>
                     <PerfLazy position="bottom-left" />
