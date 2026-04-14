@@ -1,6 +1,7 @@
 'use client'
 
 import { useGameStore } from '@/logic/gameStore'
+import Link from 'next/link'
 
 export default function GameUI() {
     const player      = useGameStore(s => s.player)
@@ -49,6 +50,11 @@ export default function GameUI() {
                         >
                             {fedCount > 0 ? 'CONTINUAR 🐾' : 'JUGAR 🐾'}
                         </button>
+                        <Link href="/" className="block w-full mt-3">
+                            <button className="w-full bg-red-500/80 text-white font-bold text-lg py-3 px-8 rounded-xl hover:scale-105 hover:bg-red-500 transition-all cursor-pointer">
+                                SALIR 🚪
+                            </button>
+                        </Link>
                     </div>
                 </div>
             )}
