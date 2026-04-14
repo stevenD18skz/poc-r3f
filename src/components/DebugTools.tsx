@@ -22,7 +22,8 @@ export function useDebugControls({title}: {title?: string}) {
             label: 'Métrica Stats.js'
         },
         showPerf: true,
-        showGizmo: true,
+        showGizmo: false,
+        showAxes: false,
         showGrid: false,
         //triangles: {
             //value: 1_000,
