@@ -2,7 +2,7 @@
 import { Stats, Grid, GizmoHelper, GizmoViewport } from '@react-three/drei'
 import { useControls, button } from 'leva'
 import * as THREE from 'three'
-import { Suspense, lazy } from 'react'
+import { Suspense, lazy, useRef, useEffect } from 'react'
 import { useThree } from '@react-three/fiber'
 import { getPerf } from 'r3f-perf'
 
@@ -33,7 +33,7 @@ const estimateVRAM = (scene: THREE.Scene): number => {
             // Calcular peso de las Texturas
             if (object.material) {
                 const materials = Array.isArray(object.material) ? object.material : [object.material];
-                materials.forEach(mat => {
+                materials.forEach((mat: { [x: string]: any }) => {
                     for (const key in mat) {
                         const tex = mat[key];
                         if (tex && tex.isTexture && tex.image && !seenTextures.has(tex.uuid)) {
@@ -61,6 +61,14 @@ const estimateVRAM = (scene: THREE.Scene): number => {
 // Hook para crear el contexto de debug
 export function useDebugControls({title, entityCount}: {title?: string, entityCount?: number}) {
     const { gl, scene } = useThree()
+    
+    const titleRef = useRef(title)
+    const entityCountRef = useRef(entityCount)
+    
+    useEffect(() => {
+        titleRef.current = title
+        entityCountRef.current = entityCount
+    }, [title, entityCount])
 
     return useControls('Debug', {
         freeCam: false,
@@ -102,8 +110,8 @@ export function useDebugControls({title, entityCount}: {title?: string, entityCo
 
             let csvContent = "data:text/csv;charset=utf-8,";
             
-            if (entityCount !== undefined) {
-                csvContent += `${entityCount.toLocaleString()} entidades\n\n`;
+            if (entityCountRef.current !== undefined) {
+                csvContent += `${entityCountRef.current.toLocaleString()} entidades\n\n`;
             }
 
             csvContent += "Escena,FPS Promedio,GPU (ms),CPU (ms),Draw Calls,Triangulos,Geometrias,Texturas,Shaders,Lineas,Puntos,Memoria RAM (MB),VRAM Estimada (MB)\n"
@@ -112,7 +120,7 @@ export function useDebugControls({title, entityCount}: {title?: string, entityCo
             const encodedUri = encodeURI(csvContent);
             const link = document.createElement("a");
             link.setAttribute("href", encodedUri);
-            link.setAttribute("download", `metricas_escena_${title}.csv`);
+            link.setAttribute("download", `metricas_escena_${titleRef.current}.csv`);
             document.body.appendChild(link); // Required for FF
             link.click();
             document.body.removeChild(link);
