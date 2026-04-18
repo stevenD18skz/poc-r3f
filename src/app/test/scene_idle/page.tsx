@@ -18,7 +18,7 @@ export default function SceneIdleTest() {
         <DebugTools title="Escena Idle (60s)" />
 
         <Suspense fallback={<Loader3D />}> 
-          <OrbitControls makeDefault autoRotate autoRotateSpeed={0.5} />
+          <OrbitControls makeDefault />
           <Environment preset="forest" background />
         </Suspense>
       </Canvas>

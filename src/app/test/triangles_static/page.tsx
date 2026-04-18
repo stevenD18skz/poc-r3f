@@ -1,11 +1,11 @@
 'use client'
 
-import { Canvas, useFrame } from '@react-three/fiber'
+import { Canvas } from '@react-three/fiber'
 import { useRef, useEffect, useState, Suspense } from 'react'
 import * as THREE from 'three'
 import PerformanceOverlay from '@/components/test/PerformanceOverlay'
 import DebugTools from '@/components/DebugTools'
-import { OrbitControls, Sparkles, Environment } from '@react-three/drei'
+import { OrbitControls } from '@react-three/drei'
 
 import Loader3D from '@/components/ui/Loader3D'
 
@@ -15,7 +15,7 @@ function InstancedTriangles({ count = 10000 }) {
 
   useEffect(() => {
     for (let i = 0; i < count; i++) {
-      const radius = 10 + Math.random() * 15
+      const radius = 10 + Math.random() * 40
       const theta = Math.random() * Math.PI * 2
       const phi = Math.random() * Math.PI
       
@@ -39,7 +39,7 @@ function InstancedTriangles({ count = 10000 }) {
 
   return (
     <instancedMesh ref={meshRef} args={[null!, null!, count]}>
-      <coneGeometry args={[0.1, 0.2, 3]} />
+      <coneGeometry args={[0.2, 0.4, 8]} />
       <meshStandardMaterial />
     </instancedMesh>
   )
@@ -61,8 +61,9 @@ export default function TrianglesStaticTest() {
           <DebugTools title="Triángulos Estáticos" entityCount={count} />
 
           <Suspense fallback={<Loader3D />}>
-            <OrbitControls makeDefault autoRotate autoRotateSpeed={0.5} />
-            <Environment preset="forest" background />
+            <OrbitControls makeDefault />
+            
+            <ambientLight intensity={1} />
             <InstancedTriangles count={count} />
           </Suspense>
       </Canvas>
