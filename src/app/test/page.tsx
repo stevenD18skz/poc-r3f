@@ -64,6 +64,27 @@ export default function TestDashboard() {
       description: 'Prueba de estrés de VRAM mediante el procesamiento de texturas en tiempo real.',
       path: '/test/vram_stress',
       icon: '💽'
+    },
+    {
+      id: 'shadows_stress',
+      title: 'Estrés de Sombras',
+      description: 'Prueba intensiva de GPU procesando múltiples fuentes de luz y sombras superpuestas.',
+      path: '/test/shadows_stress',
+      icon: '🌗'
+    },
+    {
+      id: 'materials_stress',
+      title: 'Materiales PBR Complejos',
+      description: 'Evalúa el impacto de materiales físicos avanzados como vidrio, refracción y clearcoat.',
+      path: '/test/materials_stress',
+      icon: '💎'
+    },
+    {
+      id: 'postprocessing_stress',
+      title: 'Post-Procesado Pesado',
+      description: 'Mide la carga de la GPU al aplicar pases de efectos como Bloom, SSAO, Ruido y Viñeta.',
+      path: '/test/postprocessing_stress',
+      icon: '🎬'
     }
   ];
 
@@ -98,7 +119,7 @@ export default function TestDashboard() {
         </p>
       </header>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-8 w-full max-w-6xl relative z-10">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-8 w-full max-w-[1440px] relative z-10">
         {tests.map((test) => (
           <Link
             key={test.id}
@@ -129,12 +150,6 @@ export default function TestDashboard() {
       </div>
 
       <footer className="mt-20 text-gray-500 flex flex-col items-center gap-4">
-        <Link href="/" className="hover:text-white transition-colors flex items-center gap-2">
-          <svg className="w-4 h-4 rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
-          </svg>
-          Volver a la Casa
-        </Link>
         <p className="text-sm">Tesis Grado © 2026 - Análisis de Performance WebGL</p>
       </footer>
     </main>
