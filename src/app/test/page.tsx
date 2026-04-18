@@ -11,14 +11,14 @@ export default function TestDashboard() {
     },
     {
       id: 'triangles_static',
-      title: '512,000 Triángulos Estáticos',
+      title: 'Triángulos Estáticos',
       description: 'Prueba de renderizado masivo y gestión de buffers en WebGL.',
       path: '/test/triangles_static',
       icon: '📐'
     },
     {
       id: 'triangles_rotating',
-      title: '4,000 Triángulos Rotando',
+      title: 'Triángulos Rotando',
       description: 'Prueba de estrés de CPU/GPU mediante el procesamiento de transformaciones en tiempo real.',
       path: '/test/triangles_rotating',
       icon: '🌀'
@@ -32,14 +32,14 @@ export default function TestDashboard() {
     },
     {
       id: 'raycasting',
-      title: '500 Objetos - Eventos',
+      title: 'Objetos - Eventos',
       description: 'Prueba el sistema de interactividad nativo en múltiples intersecciones concurrentes.',
       path: '/test/raycasting',
       icon: '🖱️'
     },
     {
       id: 'animation_stress',
-      title: '500 Animaciones (useFrame)',
+      title: 'Animaciones (useFrame)',
       description: 'Prueba de sobrecarga del ciclo de renderizado R3F por ref independientes.',
       path: '/test/animation_stress',
       icon: '☄️'
@@ -53,14 +53,14 @@ export default function TestDashboard() {
     },
     {
       id: 'physics_stress',
-      title: 'Estrés de Física (200 RigidBodies)',
+      title: 'Estrés de Física',
       description: 'Prueba de estrés de CPU/GPU mediante el procesamiento de transformaciones en tiempo real.',
       path: '/test/physics_stress',
       icon: '🪨'
     },
     {
       id: 'vram_stress',
-      title: 'Estrés de Memoria (200 Texturas)',
+      title: 'Estrés de Memoria',
       description: 'Prueba de estrés de VRAM mediante el procesamiento de texturas en tiempo real.',
       path: '/test/vram_stress',
       icon: '💽'

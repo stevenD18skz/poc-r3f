@@ -6,13 +6,19 @@ export default function PerformanceOverlay({
   title, 
   input, 
   count, 
-  setCount 
+  setCount,
+  unit = 'thousands'
 }: { 
   title: string, 
   input?: boolean,
   count?: number,
-  setCount?: (count: number) => void
+  setCount?: (count: number) => void,
+  unit?: 'thousands' | 'normal'
 }) {
+  const isThousands = unit === 'thousands';
+  const multiplier = isThousands ? 1000 : 1;
+  const unitLabel = isThousands ? 'TRIS' : 'OBJ';
+
   return (
     <div className="fixed top-0 left-0 w-full h-full pointer-events-none z-50 p-6 flex justify-start items-start text-left">
       {/* Panel Único Consolidado en la Izquierda */}
@@ -46,7 +52,7 @@ export default function PerformanceOverlay({
             <div className="flex justify-between items-center mb-1">
               <label className="text-[12px] uppercase tracking-[0.15em] font-black text-white/50">Carga</label>
               <span className="text-[16px] font-mono text-indigo-400 font-bold bg-indigo-500/15 px-3 py-1 rounded-full border border-indigo-500/30 shadow-inner">
-                {count.toLocaleString()} <span className="text-[8px] opacity-70 ml-1">TRIS</span>
+                {count.toLocaleString()} <span className="text-[8px] opacity-70 ml-1">{unitLabel}</span>
               </span>
             </div>
             
@@ -54,18 +60,18 @@ export default function PerformanceOverlay({
               <input 
                 type="range" 
                 min="0" 
-                max="12" 
+                max={isThousands ? 12 : 10} 
                 step="1" 
                 className="w-full accent-blue-500 cursor-pointer h-1 bg-white/10 rounded-full appearance-none hover:bg-white/20 transition-colors"
-                value={Math.log2(count / 1000)}
-                onChange={(e) => setCount(1000 * Math.pow(2, Number(e.target.value)))}
+                value={Math.log2(count / multiplier)}
+                onChange={(e) => setCount(multiplier * Math.pow(2, Number(e.target.value)))}
               />
             </div>
             
             <div className="flex justify-between text-[8px] text-white/20 font-black uppercase tracking-widest">
-              <span>Low (1K)</span>
+              <span>{isThousands ? 'Low (1K)' : 'Low (1)'}</span>
               <span>Centralized State</span>
-              <span>Ultra (2M)</span>
+              <span>{isThousands ? 'Ultra (4M)' : 'High (1K)'}</span>
             </div>
           </div>
         )}

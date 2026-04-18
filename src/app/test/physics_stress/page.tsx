@@ -42,6 +42,7 @@ export default function PhysicsStressTest() {
         input={true} 
         count={count} 
         setCount={setCount} 
+        unit="normal"
       />
 
       <Canvas shadows camera={{ position: [15, 15, 15], fov: 45 }}>

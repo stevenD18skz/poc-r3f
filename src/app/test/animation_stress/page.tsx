@@ -72,10 +72,11 @@ export default function AnimationStressTest() {
         input={true}
         count={count}
         setCount={setCount}
+        unit="normal"
       />
 
       <Canvas camera={{ position: [0, 15, 25], fov: 50 }}>
-        <DebugTools title="Animación (useFrame)" />
+        <DebugTools title="Animación (useFrame)" entityCount={count} />
         <Suspense fallback={<Loader3D />}>
           <OrbitControls makeDefault />
           <AnimationScene count={count} />

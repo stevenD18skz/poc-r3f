@@ -57,7 +57,7 @@ function VramManager({ numTextures }: { numTextures: number }) {
 }
 
 export default function VramStressTest() {
-  const [numTextures, setNumTextures] = useState(20)
+  const [numTextures, setNumTextures] = useState(32)
 
   return (
     <main className="relative w-full h-screen bg-[#050505] overflow-hidden">
@@ -66,6 +66,7 @@ export default function VramStressTest() {
         input={true} 
         count={numTextures} 
         setCount={setNumTextures} 
+        unit="normal"
       />
 
       <Canvas camera={{ position: [0, 0, 30], fov: 45 }}>

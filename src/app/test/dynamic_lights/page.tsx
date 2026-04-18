@@ -186,10 +186,12 @@ export default function DynamicLightsTest() {
         input={true} 
         count={count} 
         setCount={setCount} 
+        unit="normal"
       />
 
       <Canvas camera={{ position: [0, 20, 35], fov: 50 }} shadows>
         <DebugTools title="Iluminación Dinámica" entityCount={count} />
+        
         <Suspense fallback={<Loader3D />}>
           <SoftShadows size={15} samples={10} focus={0.5} />
           
