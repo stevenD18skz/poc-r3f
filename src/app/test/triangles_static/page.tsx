@@ -57,12 +57,13 @@ export default function TrianglesStaticTest() {
         setCount={setCount} 
       />
 
-      <Canvas camera={{ position: [20, 20, 20], fov: 50 }}>
+      <Canvas 
+        camera={{ position: [120, 0, 0], fov: 50 }}
+      > 
           <DebugTools title="Triángulos Estáticos" entityCount={count} />
 
           <Suspense fallback={<Loader3D />}>
             <OrbitControls makeDefault />
-            
             <ambientLight intensity={1} />
             <InstancedTriangles count={count} />
           </Suspense>

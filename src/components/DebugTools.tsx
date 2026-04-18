@@ -9,9 +9,58 @@ import { getPerf } from 'r3f-perf'
 // Carga dinámica de r3f-perf para evitar error de Turbopack con .woff
 const PerfLazy = lazy(() => import('r3f-perf').then(mod => ({ default: mod.Perf })))
 
+// Función para estimar la VRAM en base a Geometrías y Texturas en la escena
+const estimateVRAM = (scene: THREE.Scene): number => {
+    let totalBytes = 0;
+    const seenGeometries = new Set();
+    const seenTextures = new Set();
+
+    scene.traverse((object: any) => {
+        if (object.isMesh) {
+            // Calcular peso de la Geometría
+            if (object.geometry && !seenGeometries.has(object.geometry.uuid)) {
+                seenGeometries.add(object.geometry.uuid);
+                const attributes = object.geometry.attributes;
+                for (const key in attributes) {
+                    const attribute = attributes[key];
+                    totalBytes += attribute.array.length * attribute.array.BYTES_PER_ELEMENT;
+                }
+                if (object.geometry.index) {
+                    totalBytes += object.geometry.index.array.length * object.geometry.index.array.BYTES_PER_ELEMENT;
+                }
+            }
+
+            // Calcular peso de las Texturas
+            if (object.material) {
+                const materials = Array.isArray(object.material) ? object.material : [object.material];
+                materials.forEach(mat => {
+                    for (const key in mat) {
+                        const tex = mat[key];
+                        if (tex && tex.isTexture && tex.image && !seenTextures.has(tex.uuid)) {
+                            seenTextures.add(tex.uuid);
+                            const width = tex.image.width || 0;
+                            const height = tex.image.height || 0;
+                            // Asumiendo mapa de bits RGBA (4 bytes por pixel)
+                            let texBytes = width * height * 4;
+                            // Si tiene mipmaps generados (por defecto en ThreeJS), ocupa ~1.33x más espacio en VRAM
+                            if (tex.generateMipmaps) {
+                                texBytes *= 1.33;
+                            }
+                            totalBytes += texBytes;
+                        }
+                    }
+                });
+            }
+        }
+    });
+
+    // Retornamos el valor en Megabytes (MB)
+    return totalBytes / (1024 * 1024);
+};
+
 // Hook para crear el contexto de debug
 export function useDebugControls({title, entityCount}: {title?: string, entityCount?: number}) {
-    const { gl } = useThree()
+    const { gl, scene } = useThree()
 
     return useControls('Debug', {
         freeCam: false,
@@ -49,6 +98,7 @@ export function useDebugControls({title, entityCount}: {title?: string, entityCo
             const cpuMs = logData.cpu.toFixed(2);
             const fpsAvg = logData.fps.toFixed(2);
             const memMB = logData.mem.toFixed(2);
+            const estVramMB = estimateVRAM(scene).toFixed(2);
 
             let csvContent = "data:text/csv;charset=utf-8,";
             
@@ -56,8 +106,8 @@ export function useDebugControls({title, entityCount}: {title?: string, entityCo
                 csvContent += `${entityCount.toLocaleString()} entidades\n\n`;
             }
 
-            csvContent += "Escena,FPS Promedio,GPU (ms),CPU (ms),Draw Calls,Triangulos,Geometrias,Texturas,Shaders,Lineas,Puntos,Memoria RAM (MB)\n"
-                + `Metricas Actuales,${fpsAvg},${gpuMs},${cpuMs},${calls},${renderTriangles},${geometries},${textures},${shaders},${lines},${points},${memMB}\n`;
+            csvContent += "Escena,FPS Promedio,GPU (ms),CPU (ms),Draw Calls,Triangulos,Geometrias,Texturas,Shaders,Lineas,Puntos,Memoria RAM (MB),VRAM Estimada (MB)\n"
+                + `Metricas Actuales,${fpsAvg},${gpuMs},${cpuMs},${calls},${renderTriangles},${geometries},${textures},${shaders},${lines},${points},${memMB},${estVramMB}\n`;
 
             const encodedUri = encodeURI(csvContent);
             const link = document.createElement("a");

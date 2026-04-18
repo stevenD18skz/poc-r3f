@@ -5,7 +5,7 @@ import { useRef, useEffect, useState, Suspense, useMemo } from 'react'
 import * as THREE from 'three'
 import PerformanceOverlay from '@/components/test/PerformanceOverlay'
 import DebugTools from '@/components/DebugTools'
-import { OrbitControls, Sparkles, Environment } from '@react-three/drei'
+import { OrbitControls } from '@react-three/drei'
 
 import Loader3D from '@/components/ui/Loader3D'
 
@@ -17,7 +17,7 @@ function InstancedRotatingTriangles({ count = 1000 }) {
   const particles = useMemo(() => {
     const temp = []
     for (let i = 0; i < count; i++) {
-        const radius = 10 + Math.random() * 15
+        const radius = 10 + Math.random() * 40
         const theta = Math.random() * Math.PI * 2
         const phi = Math.random() * Math.PI
         
@@ -26,7 +26,7 @@ function InstancedRotatingTriangles({ count = 1000 }) {
         const z = radius * Math.cos(phi)
         
         const rotationSpeed = (Math.random() - 0.5) * 2
-        const color = new THREE.Color(`hsl(${Math.random() * 50 + 200}, 80%, 50%)`)
+        const color = new THREE.Color(`hsl(${Math.random() * 70 + 150}, 80%, 50%)`)
         
         temp.push({ x, y, z, rotationSpeed, color })
     }
@@ -65,7 +65,7 @@ function InstancedRotatingTriangles({ count = 1000 }) {
 
   return (
     <instancedMesh ref={meshRef} args={[null!, null!, count]}>
-      <coneGeometry args={[0.1, 0.2, 3]} />
+      <coneGeometry args={[0.2, 0.4, 8]} />
       <meshStandardMaterial />
     </instancedMesh>
   )
@@ -83,12 +83,14 @@ export default function TrianglesRotatingTest() {
         setCount={setCount} 
       />
 
-      <Canvas camera={{ position: [15, 15, 15], fov: 50 }}>
+      <Canvas
+      camera={{ position: [120, 0, 0], fov: 50 }}
+      >
           <DebugTools title="Triángulos Rotando" entityCount={count} />
 
           <Suspense fallback={<Loader3D />}>
             <OrbitControls makeDefault />
-            <Environment preset="forest" background />
+            <ambientLight intensity={1} />
             <InstancedRotatingTriangles count={count} />
           </Suspense>
       </Canvas>

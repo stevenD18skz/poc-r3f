@@ -13,7 +13,7 @@ export default function SceneIdleTest() {
       <PerformanceOverlay title="Escena Idle (60s)" />
       
       <Canvas
-        camera={{ position: [5, 1.6, 5], fov: 50 }}
+        camera={{ position: [120, 0, 0], fov: 50 }}
       >
         <DebugTools title="Escena Idle (60s)" />
 
