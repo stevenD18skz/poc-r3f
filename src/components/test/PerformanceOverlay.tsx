@@ -51,7 +51,7 @@ export default function PerformanceOverlay({
           <div className="bg-white/5 px-6 py-3 border-t border-white/10 flex flex-col gap-4 rounded-3xl">
             <div className="flex justify-between items-center mb-1">
               <label className="text-[12px] uppercase tracking-[0.15em] font-black text-white/50">Carga</label>
-              <span className="text-[16px] font-mono text-indigo-400 font-bold bg-indigo-500/15 px-3 py-1 rounded-full border border-indigo-500/30 shadow-inner">
+              <span suppressHydrationWarning className="text-[16px] font-mono text-indigo-400 font-bold bg-indigo-500/15 px-3 py-1 rounded-full border border-indigo-500/30 shadow-inner">
                 {count.toLocaleString()} <span className="text-[8px] opacity-70 ml-1">{unitLabel}</span>
               </span>
             </div>

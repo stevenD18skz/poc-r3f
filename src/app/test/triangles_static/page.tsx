@@ -35,12 +35,7 @@ function InstancedTriangles({ count = 10000 }) {
     meshRef.current.instanceMatrix.needsUpdate = true
     if (meshRef.current.instanceColor) meshRef.current.instanceColor.needsUpdate = true
   }, [count])
-
-  // Optional: Gentle vibration/oscillation
-  useFrame((state) => {
-    const t = state.clock.getElapsedTime()
-    meshRef.current.rotation.y = t * 0.05
-  })
+ 
 
   return (
     <instancedMesh ref={meshRef} args={[null!, null!, count]}>
