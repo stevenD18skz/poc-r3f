@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import processMap from '@/helpers/generator'
+import processMap from '@/utils/generator'
 import type Room from '@/types/room'
 
 // ─────────────────────────────────────────────

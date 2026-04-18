@@ -14,18 +14,14 @@ export default function SceneIdleTest() {
       
       <Canvas
         camera={{ position: [5, 1.6, 5], fov: 50 }}
-        shadows
-        gl={{ antialias: true }}
       >
         <DebugTools title="Escena Idle (60s)" />
 
         <Suspense fallback={<Loader3D />}> 
           <OrbitControls makeDefault autoRotate autoRotateSpeed={0.5} />
           <ambientLight intensity={0.5} />
-          <spotLight position={[10, 10, 10]} angle={0.15} penumbra={1} intensity={2} castShadow />
           <Environment preset="forest" background />
         </Suspense>
-
       </Canvas>
     </main>
   )
