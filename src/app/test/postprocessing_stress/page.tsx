@@ -85,7 +85,7 @@ export default function PostProcessingStressTest() {
           <PostProcessingScene count={count} />
 
           {/* Capa de Post-procesado Pesado */}
-          <EffectComposer disableNormalPass>
+          <EffectComposer>
             <SSAO 
               intensity={20}
               luminanceInfluence={0.5}
