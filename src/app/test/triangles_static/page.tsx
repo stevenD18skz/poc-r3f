@@ -63,12 +63,11 @@ export default function TrianglesStaticTest() {
       />
 
       <Canvas camera={{ position: [20, 20, 20], fov: 50 }}>
-          <DebugTools title="Triángulos Estáticos" />
+          <DebugTools title="Triángulos Estáticos" entityCount={count} />
 
           <Suspense fallback={<Loader3D />}>
             <OrbitControls makeDefault autoRotate autoRotateSpeed={0.5} />
             <Environment preset="forest" background />
-            <Sparkles count={500} size={5} speed={0.5} scale={30} opacity={0.3} color="#ffffff" />
             <InstancedTriangles count={count} />
           </Suspense>
       </Canvas>

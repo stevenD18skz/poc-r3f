@@ -45,7 +45,7 @@ export default function PhysicsStressTest() {
       />
 
       <Canvas shadows camera={{ position: [15, 15, 15], fov: 45 }}>
-        <DebugTools title="Estrés de Física" />
+        <DebugTools title="Estrés de Física" entityCount={count} />
         <Suspense fallback={<Loader3D />}>
           <OrbitControls makeDefault />
           <Environment preset="city" />

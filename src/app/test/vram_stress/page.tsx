@@ -6,7 +6,6 @@ import * as THREE from 'three'
 import PerformanceOverlay from '@/components/test/PerformanceOverlay'
 import DebugTools from '@/components/DebugTools'
 import Loader3D from '@/components/ui/Loader3D'
-import DebugTools from '@/components/DebugTools'
 import { OrbitControls, Environment, Sphere, Text } from '@react-three/drei'
 
 // Generador de texturas procedurales pesadas para simular VRAM
@@ -70,7 +69,7 @@ export default function VramStressTest() {
       />
 
       <Canvas camera={{ position: [0, 0, 30], fov: 45 }}>
-        <DebugTools title="Estrés de VRAM" />
+        <DebugTools title="Estrés de VRAM" entityCount={numTextures} />
         <Suspense fallback={<Loader3D />}>
           <OrbitControls makeDefault autoRotate autoRotateSpeed={0.5} />
           <VramManager numTextures={numTextures} />

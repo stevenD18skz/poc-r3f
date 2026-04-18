@@ -67,11 +67,11 @@ export default function AnimationStressTest() {
 
   return (
     <main className="relative w-full h-screen bg-[#050505] overflow-hidden">
-      <PerformanceOverlay 
-        title={`${count} Objetos Animados`} 
-        input={true} 
-        count={count} 
-        setCount={setCount} 
+      <PerformanceOverlay
+        title={`${count} Objetos Animados`}
+        input={true}
+        count={count}
+        setCount={setCount}
       />
 
       <Canvas camera={{ position: [0, 15, 25], fov: 50 }}>

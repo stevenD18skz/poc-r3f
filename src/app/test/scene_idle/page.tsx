@@ -19,7 +19,6 @@ export default function SceneIdleTest() {
 
         <Suspense fallback={<Loader3D />}> 
           <OrbitControls makeDefault autoRotate autoRotateSpeed={0.5} />
-          <ambientLight intensity={0.5} />
           <Environment preset="forest" background />
         </Suspense>
       </Canvas>

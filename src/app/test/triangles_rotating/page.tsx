@@ -84,12 +84,11 @@ export default function TrianglesRotatingTest() {
       />
 
       <Canvas camera={{ position: [15, 15, 15], fov: 50 }}>
-          <DebugTools title="Triángulos Rotando" />
+          <DebugTools title="Triángulos Rotando" entityCount={count} />
 
           <Suspense fallback={<Loader3D />}>
             <OrbitControls makeDefault />
             <Environment preset="forest" background />
-            <Sparkles count={500} size={5} speed={0.5} scale={30} opacity={0.3} color="#ffffff" />
             <InstancedRotatingTriangles count={count} />
           </Suspense>
       </Canvas>

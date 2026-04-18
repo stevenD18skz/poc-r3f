@@ -10,7 +10,7 @@ import { getPerf } from 'r3f-perf'
 const PerfLazy = lazy(() => import('r3f-perf').then(mod => ({ default: mod.Perf })))
 
 // Hook para crear el contexto de debug
-export function useDebugControls({title}: {title?: string}) {
+export function useDebugControls({title, entityCount}: {title?: string, entityCount?: number}) {
     const { gl } = useThree()
 
     return useControls('Debug', {
@@ -50,8 +50,13 @@ export function useDebugControls({title}: {title?: string}) {
             const fpsAvg = logData.fps.toFixed(2);
             const memMB = logData.mem.toFixed(2);
 
-            const csvContent = "data:text/csv;charset=utf-8," 
-                + "Escena,FPS Promedio,GPU (ms),CPU (ms),Draw Calls,Triangulos,Geometrias,Texturas,Shaders,Lineas,Puntos,Memoria RAM (MB)\n"
+            let csvContent = "data:text/csv;charset=utf-8,";
+            
+            if (entityCount !== undefined) {
+                csvContent += `${entityCount.toLocaleString()} entidades\n\n`;
+            }
+
+            csvContent += "Escena,FPS Promedio,GPU (ms),CPU (ms),Draw Calls,Triangulos,Geometrias,Texturas,Shaders,Lineas,Puntos,Memoria RAM (MB)\n"
                 + `Metricas Actuales,${fpsAvg},${gpuMs},${cpuMs},${calls},${renderTriangles},${geometries},${textures},${shaders},${lines},${points},${memMB}\n`;
 
             const encodedUri = encodeURI(csvContent);
@@ -65,8 +70,8 @@ export function useDebugControls({title}: {title?: string}) {
     })
 }
 
-export default function DebugTools({title}: {title: string}) {
-    const { showAxes, showGrid, showStats, statPanel, showGizmo, showPerf } = useDebugControls({title})
+export default function DebugTools({title, entityCount}: {title: string, entityCount?: number}) {
+    const { showAxes, showGrid, showStats, statPanel, showGizmo, showPerf } = useDebugControls({title, entityCount})
 
     return (
         <>
