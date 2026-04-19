@@ -1,204 +1,404 @@
 'use client'
 
 import { Canvas, useFrame } from '@react-three/fiber'
-import { useRef, useMemo, useState, Suspense } from 'react'
+import { useRef, useState, Suspense } from 'react'
 import * as THREE from 'three'
 import PerformanceOverlay from '@/components/test/PerformanceOverlay'
 import DebugTools from '@/components/DebugTools'
 import Loader3D from '@/components/ui/Loader3D'
-import { OrbitControls, SoftShadows, Box, Sphere, Torus, Cylinder } from '@react-three/drei'
+import { OrbitControls } from '@react-three/drei'
 
-// Animación de Luces Puntuales (PointLights)
-function MovingPointLight({ initialPosition, color, speed, radius }: { initialPosition: [number, number, number], color: string, speed: number, radius: number }) {
+// ─────────────────────────────────────────────
+// PARÁMETROS DEL TEST (deben ser idénticos en Babylon)
+// ─────────────────────────────────────────────
+// Geometría: 1 piso + 9 objetos fijos (3 boxes, 3 spheres, 3 cylinders)
+// Luces: 1 ambient + N luces dinámicas del tipo seleccionado
+// Sombras: todas las luces lanzan sombra
+// Draw calls fijos: ~10 (no escala con el count)
+// Variable: cantidad y tipo de luces (el count + lightType)
+// ─────────────────────────────────────────────
+
+// Tipos de luces disponibles con sus valores por defecto
+const LIGHT_TYPE_OPTIONS: Record<string, number> = {
+  PointLight: 0,
+  SpotLight: 0,
+  DirectionalLight: 0,
+  HemisphereLight: 0,
+}
+
+// Labels legibles para la UI
+const LIGHT_LABELS: Record<string, string> = {
+  PointLight: 'Point Light',
+  SpotLight: 'Spot Light',
+  DirectionalLight: 'Directional Light',
+  HemisphereLight: 'Hemisphere Light',
+}
+
+// ─────────────────────────────────────────────
+// COMPONENTES DE LUCES DINÁMICAS
+// ─────────────────────────────────────────────
+
+// Luz puntual que se mueve, con esfera visual para identificarla
+function MovingPointLight({
+  index,
+  total,
+  speed,
+}: {
+  index: number
+  total: number
+  speed: number
+}) {
   const ref = useRef<THREE.PointLight>(null!)
+
+  const angle = (index / total) * Math.PI * 2
+  const radius = 8
 
   useFrame((state) => {
     const t = state.clock.getElapsedTime() * speed
-    ref.current.position.x = initialPosition[0] + Math.sin(t) * radius
-    ref.current.position.z = initialPosition[2] + Math.cos(t * 0.8) * radius
-    ref.current.position.y = initialPosition[1] + Math.sin(t * 1.5) * 2
+    ref.current.position.x = Math.cos(t + angle) * radius
+    ref.current.position.z = Math.sin(t + angle) * radius
+    ref.current.position.y = 3 + Math.sin(t * 1.5 + angle) * 1.5
   })
 
+  const color = `hsl(${(index / total) * 360}, 100%, 60%)`
+
   return (
-    <pointLight 
-      ref={ref} 
-      color={color} 
-      intensity={8} 
-      distance={20} 
+    <pointLight
+      ref={ref}
+      color={color}
+      intensity={10}
+      distance={20}
       castShadow
       shadow-bias={-0.001}
-      shadow-mapSize={[512, 512]}
+      shadow-mapSize={[256, 256]}
     >
-      {/* Pequeña esfera para visualizar la luz */}
       <mesh>
-        <sphereGeometry args={[0.2, 16, 16]} />
+        <sphereGeometry args={[0.15, 8, 8]} />
         <meshBasicMaterial color={color} />
       </mesh>
     </pointLight>
   )
 }
 
-// Animación de Focos (SpotLights)
-function RotatingSpotLight({ position, color, speed }: { position: [number, number, number], color: string, speed: number }) {
+// Spot light que se mueve y apunta al centro de la escena
+function MovingSpotLight({
+  index,
+  total,
+  speed,
+}: {
+  index: number
+  total: number
+  speed: number
+}) {
   const ref = useRef<THREE.SpotLight>(null!)
-  // En R3F, pasar ref.current como prop en el primer render lanza error de null matrixWorld
-  // Es mejor crear el Object3D una sola vez y pasarlo directo como target
-  const target = useMemo(() => new THREE.Object3D(), [])
+  const targetRef = useRef<THREE.Object3D>(null!)
+
+  const angle = (index / total) * Math.PI * 2
+  const radius = 10
 
   useFrame((state) => {
     const t = state.clock.getElapsedTime() * speed
-    target.position.x = Math.sin(t) * 10
-    target.position.z = Math.cos(t) * 10
+    ref.current.position.x = Math.cos(t + angle) * radius
+    ref.current.position.z = Math.sin(t + angle) * radius
+    ref.current.position.y = 8 + Math.sin(t * 1.2 + angle) * 2
+
+    // El target se mueve ligeramente para dar variación
+    if (targetRef.current) {
+      targetRef.current.position.x = Math.sin(t * 0.5 + angle) * 2
+      targetRef.current.position.z = Math.cos(t * 0.5 + angle) * 2
+      targetRef.current.position.y = 0
+    }
+  })
+
+  const color = `hsl(${(index / total) * 360}, 100%, 60%)`
+
+  return (
+    <>
+      <spotLight
+        ref={ref}
+        color={color}
+        intensity={30}
+        distance={30}
+        angle={Math.PI / 6}
+        penumbra={0.5}
+        castShadow
+        shadow-bias={-0.001}
+        shadow-mapSize={[256, 256]}
+        target={targetRef.current!}
+      >
+        {/* Cono visual: identifica la posición del spot */}
+        <mesh>
+          <coneGeometry args={[0.15, 0.3, 8]} />
+          <meshBasicMaterial color={color} />
+        </mesh>
+      </spotLight>
+      <object3D ref={targetRef} />
+    </>
+  )
+}
+
+// Directional light dinámica que orbita la escena
+function MovingDirectionalLight({
+  index,
+  total,
+  speed,
+}: {
+  index: number
+  total: number
+  speed: number
+}) {
+  const ref = useRef<THREE.DirectionalLight>(null!)
+
+  const angle = (index / total) * Math.PI * 2
+
+  useFrame((state) => {
+    const t = state.clock.getElapsedTime() * speed
+    ref.current.position.x = Math.cos(t + angle) * 15
+    ref.current.position.z = Math.sin(t + angle) * 15
+    ref.current.position.y = 12 + Math.sin(t * 0.8 + angle) * 4
+  })
+
+  const color = `hsl(${(index / total) * 360}, 100%, 60%)`
+
+  return (
+    <directionalLight
+      ref={ref}
+      color={color}
+      intensity={1.5}
+      castShadow
+      shadow-mapSize={[256, 256]}
+      shadow-camera-left={-15}
+      shadow-camera-right={15}
+      shadow-camera-top={15}
+      shadow-camera-bottom={-15}
+      shadow-bias={-0.001}
+    >
+      {/* Cubo visual: identifica la posición de la dir light */}
+      <mesh>
+        <boxGeometry args={[0.25, 0.25, 0.25]} />
+        <meshBasicMaterial color={color} />
+      </mesh>
+    </directionalLight>
+  )
+}
+
+// Hemisphere light dinámica con colores cambiantes
+function MovingHemisphereLight({
+  index,
+  total,
+  speed,
+}: {
+  index: number
+  total: number
+  speed: number
+}) {
+  const ref = useRef<THREE.HemisphereLight>(null!)
+
+  useFrame((state) => {
+    const t = state.clock.getElapsedTime() * speed
+    const hue = ((index / total) * 360 + t * 20) % 360
+    ref.current.color.setHSL(hue / 360, 1, 0.6)
+    ref.current.groundColor.setHSL(((hue + 180) % 360) / 360, 0.8, 0.3)
   })
 
   return (
+    <hemisphereLight
+      ref={ref}
+      intensity={0.8}
+    />
+  )
+}
+
+// ─────────────────────────────────────────────
+// GEOMETRÍA FIJA - Siempre igual, sin importar el count
+// Simple, reproducible en Babylon exactamente igual
+// ─────────────────────────────────────────────
+function StaticScene() {
+  return (
     <>
-        <spotLight 
-        ref={ref} 
-        position={position} 
-        color={color} 
-        intensity={15} 
-        angle={Math.PI / 5} 
-        penumbra={0.5} 
+      {/* Piso */}
+      <mesh rotation-x={-Math.PI / 2} position={[0, 0, 0]} receiveShadow>
+        <planeGeometry args={[40, 40]} />
+        <meshStandardMaterial color="#111118" roughness={0.4} metalness={0.6} />
+      </mesh>
+
+      {/* 3 Boxes */}
+      <mesh position={[-4, 1, -4]} castShadow receiveShadow>
+        <boxGeometry args={[2, 2, 2]} />
+        <meshStandardMaterial color="#6366f1" roughness={0.4} metalness={0.3} />
+      </mesh>
+      <mesh position={[0, 1.5, -4]} castShadow receiveShadow>
+        <boxGeometry args={[2, 3, 2]} />
+        <meshStandardMaterial color="#8b5cf6" roughness={0.4} metalness={0.3} />
+      </mesh>
+      <mesh position={[4, 1, -4]} castShadow receiveShadow>
+        <boxGeometry args={[2, 2, 2]} />
+        <meshStandardMaterial color="#a78bfa" roughness={0.4} metalness={0.3} />
+      </mesh>
+
+      {/* 3 Spheres */}
+      <mesh position={[-4, 1, 0]} castShadow receiveShadow>
+        <sphereGeometry args={[1, 32, 32]} />
+        <meshStandardMaterial color="#ec4899" roughness={0.2} metalness={0.7} />
+      </mesh>
+      <mesh position={[0, 1, 0]} castShadow receiveShadow>
+        <sphereGeometry args={[1, 32, 32]} />
+        <meshStandardMaterial color="#f43f5e" roughness={0.2} metalness={0.7} />
+      </mesh>
+      <mesh position={[4, 1, 0]} castShadow receiveShadow>
+        <sphereGeometry args={[1, 32, 32]} />
+        <meshStandardMaterial color="#fb7185" roughness={0.2} metalness={0.7} />
+      </mesh>
+
+      {/* 3 Cylinders */}
+      <mesh position={[-4, 1.5, 4]} castShadow receiveShadow>
+        <cylinderGeometry args={[0.8, 0.8, 3, 32]} />
+        <meshStandardMaterial color="#06b6d4" roughness={0.3} metalness={0.5} />
+      </mesh>
+      <mesh position={[0, 1.5, 4]} castShadow receiveShadow>
+        <cylinderGeometry args={[0.8, 0.8, 3, 32]} />
+        <meshStandardMaterial color="#0ea5e9" roughness={0.3} metalness={0.5} />
+      </mesh>
+      <mesh position={[4, 1.5, 4]} castShadow receiveShadow>
+        <cylinderGeometry args={[0.8, 0.8, 3, 32]} />
+        <meshStandardMaterial color="#38bdf8" roughness={0.3} metalness={0.5} />
+      </mesh>
+    </>
+  )
+}
+
+// Renderiza las luces dinámicas según el tipo seleccionado
+function DynamicLights({ lightCount, lightType }: { lightCount: number; lightType: string }) {
+  return (
+    <>
+      {Array.from({ length: lightCount }).map((_, i) => {
+        const speed = 0.3 + (i % 5) * 0.1
+
+        switch (lightType) {
+          case 'SpotLight':
+            return (
+              <MovingSpotLight
+                key={`spot-${i}`}
+                index={i}
+                total={lightCount}
+                speed={speed}
+              />
+            )
+          case 'DirectionalLight':
+            return (
+              <MovingDirectionalLight
+                key={`dir-${i}`}
+                index={i}
+                total={lightCount}
+                speed={speed}
+              />
+            )
+          case 'HemisphereLight':
+            return (
+              <MovingHemisphereLight
+                key={`hemi-${i}`}
+                index={i}
+                total={lightCount}
+                speed={speed}
+              />
+            )
+          case 'PointLight':
+          default:
+            return (
+              <MovingPointLight
+                key={`point-${i}`}
+                index={i}
+                total={lightCount}
+                speed={speed}
+              />
+            )
+        }
+      })}
+    </>
+  )
+}
+
+function LightingScene({ lightCount, lightType }: { lightCount: number; lightType: string }) {
+  return (
+    <>
+      {/* Luz ambiental base - misma en Babylon */}
+      <ambientLight intensity={0.3} />
+
+      {/* Luz direccional fija (simula sol) - misma en Babylon */}
+      <directionalLight
+        position={[10, 20, 10]}
+        intensity={1.0}
         castShadow
+        shadow-mapSize={[1024, 1024]}
+        shadow-camera-left={-20}
+        shadow-camera-right={20}
+        shadow-camera-top={20}
+        shadow-camera-bottom={-20}
         shadow-bias={-0.0005}
-        target={target}
-        />
-        <primitive object={target} />
-    </>
-  )
-}
-
-// Suelo detallado
-function DetailedFloor() {
-  return (
-    <mesh rotation-x={-Math.PI / 2} position={[0, -0.5, 0]} receiveShadow>
-      <planeGeometry args={[100, 100, 64, 64]} />
-      <meshStandardMaterial 
-        color="#101015" 
-        roughness={0.2} 
-        metalness={0.8} 
-        // Generamos un pequeño bump map procedural con wireframe false
-        wireframe={false}
-      />
-    </mesh>
-  )
-}
-
-// Generador de Mascotas instanciadas (AnimalHerd)
-// Utilizamos el mismo diseño del "Gato" o mascota simple para crear una manada.
-function AnimalHerd({ count }: { count: number }) {
-  const animals = useMemo(() => {
-    const list = []
-    for (let i = 0; i < count; i++) {
-        // Posiciones aleatorias en el plano
-      list.push({
-        position: [(Math.random() - 0.5) * 40, 0, (Math.random() - 0.5) * 40] as [number, number, number],
-        rotation: [0, Math.random() * Math.PI * 2, 0] as [number, number, number],
-        // Variedad de colores para la manada
-        color: `hsl(${Math.random() * 50 + 20}, 90%, 50%)`,
-        scale: 0.8 + Math.random() * 0.5
-      })
-    }
-    return list
-  }, [count])
-
-  return (
-    <>
-      {animals.map((anim, i) => (
-        <group key={i} position={anim.position} rotation={anim.rotation} scale={anim.scale}>
-            {/* Cuerpo del Animal que lanza/recibe sombras */}
-            <mesh position={[0, 0.5, -0.5]} castShadow receiveShadow>
-                <boxGeometry args={[1.2, 0.8, 1.8]} />
-                <meshStandardMaterial color={anim.color} roughness={0.6} metalness={0.1} />
-            </mesh>
-            
-            {/* Cabeza */}
-            <mesh position={[0, 1, 0.5]} castShadow receiveShadow>
-                <boxGeometry args={[1, 1, 1]} />
-                <meshStandardMaterial color={anim.color} roughness={0.5} metalness={0.1} />
-                {/* Orejas */}
-                <mesh position={[-0.3, 0.6, 0]} castShadow>
-                    <coneGeometry args={[0.2, 0.5, 4]} />
-                    <meshStandardMaterial color="#c2410c" />
-                </mesh>
-                <mesh position={[0.3, 0.6, 0]} castShadow>
-                    <coneGeometry args={[0.2, 0.5, 4]} />
-                    <meshStandardMaterial color="#c2410c" />
-                </mesh>
-            </mesh>
-        </group>
-      ))}
-    </>
-  )
-}
-
-function ExhaustiveDynamicLightsScene({ animalCount = 100 }: { animalCount?: number }) {
-  return (
-    <>
-    <ambientLight intensity={3}  />
-      
-      {/* Luz Direccional Principal (Sol/Luna) */}
-      <directionalLight 
-        position={[20, 30, 20]} 
-        intensity={1.5} 
-        castShadow 
-        shadow-mapSize={[2048, 2048]}
-        shadow-camera-left={-30}
-        shadow-camera-right={30}
-        shadow-camera-top={30}
-        shadow-camera-bottom={-30}
-        shadow-bias={-0.0005}
-        color="#a5b4fc"
       />
 
-      {/* Focos Dinámicos (SpotLights) */}
-      <RotatingSpotLight position={[15, 15, 0]} color="#fb7185" speed={0.5} />
-      <RotatingSpotLight position={[-15, 15, 0]} color="#38bdf8" speed={0.7} />
-      <RotatingSpotLight position={[0, 15, 15]} color="#34d399" speed={0.4} />
+      {/* N Luces dinámicas del tipo seleccionado */}
+      <DynamicLights lightCount={lightCount} lightType={lightType} />
 
-      {/* Luces Puntuales Dinámicas (PointLights) - Reducimos cantidad a 30 por ser muy exhaustivas */}
-      {Array.from({ length: 30 }).map((_, i) => (
-        <MovingPointLight 
-            key={i} 
-            initialPosition={[(Math.random() - 0.5) * 30, 2 + Math.random() * 5, (Math.random() - 0.5) * 30]} 
-            color={`hsl(${(i / 30) * 360}, 100%, 60%)`} 
-            speed={0.2 + Math.random() * 1.5} 
-            radius={2 + Math.random() * 5}
-        />
-      ))}
-
-      <DetailedFloor />
-      
-      {/* Animales arrojando y recibiendo sombras complejas */}
-      <AnimalHerd count={animalCount} />
+      {/* Geometría estática */}
+      <StaticScene />
     </>
   )
 }
 
 export default function DynamicLightsTest() {
-  const [count, setCount] = useState(100)
+  const [count, setCount] = useState(13)
+  const [selectedLightType, setSelectedLightType] = useState<string>('PointLight')
+
+  // Opciones dinámicas: el valor refleja la cantidad activa del tipo seleccionado
+  const selectOptions: Record<string, number> = Object.fromEntries(
+    Object.keys(LIGHT_TYPE_OPTIONS).map((key) => [
+      key,
+      key === selectedLightType ? count : 0,
+    ])
+  )
 
   return (
     <main className="relative w-full h-screen bg-[#050505] overflow-hidden">
-      <PerformanceOverlay 
-        title={`Iluminación: ${count} Geometrías`} 
-        input={true} 
-        count={count} 
-        setCount={setCount} 
+      <PerformanceOverlay
+        title={`${count} ${LIGHT_LABELS[selectedLightType]}s Dinámicas`}
+        input={true}
+        count={count}
+        setCount={setCount}
         unit="normal"
+        selectOptions={selectOptions}
+        selectedOption={selectedLightType}
+        onSelectChange={(key) => setSelectedLightType(key)}
       />
 
-      <Canvas camera={{ position: [0, 20, 35], fov: 50 }} shadows>
+      <Canvas
+        camera={{ position: [0, 15, 25], fov: 50 }}
+        shadows
+      >
         <DebugTools title="Iluminación Dinámica" entityCount={count} />
-        
+
         <Suspense fallback={<Loader3D />}>
-          <SoftShadows size={15} samples={10} focus={0.5} />
-          
-          <OrbitControls makeDefault maxPolarAngle={Math.PI / 2 - 0.05} />
-          <ExhaustiveDynamicLightsScene animalCount={count} />
+          <OrbitControls
+            makeDefault
+            maxPolarAngle={Math.PI / 2 - 0.05}
+          />
+          <LightingScene lightCount={count} lightType={selectedLightType} />
         </Suspense>
       </Canvas>
+
+      {/* Info del test */}
+      <div className="absolute bottom-32 left-6 bg-black bg-opacity-70 p-4 rounded-lg border border-purple-500 text-white text-xs max-w-xs">
+        <h3 className="font-bold text-purple-400 mb-2">Especificaciones del test</h3>
+        <ul className="space-y-1 text-gray-300">
+          <li>• Geometría: 1 piso + 9 objetos fijos</li>
+          <li>• Draw calls fijos: ~10</li>
+          <li>• Luces fijas: 1 ambient + 1 directional</li>
+          <li>• Luces variables: {count} {LIGHT_LABELS[selectedLightType]}s</li>
+          <li>• Tipo activo: <span className="text-indigo-400 font-bold">{LIGHT_LABELS[selectedLightType]}</span></li>
+          <li>• Todas con shadow casting{selectedLightType === 'HemisphereLight' ? ' (N/A)' : ''}</li>
+          <li>• Shadow map: 256×256 por luz</li>
+        </ul>
+      </div>
     </main>
   )
 }

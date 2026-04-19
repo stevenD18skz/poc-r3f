@@ -7,13 +7,19 @@ export default function PerformanceOverlay({
   input, 
   count, 
   setCount,
-  unit = 'thousands'
+  unit = 'thousands',
+  selectOptions,
+  selectedOption,
+  onSelectChange,
 }: { 
   title: string, 
   input?: boolean,
   count?: number,
   setCount?: (count: number) => void,
-  unit?: 'thousands' | 'normal'
+  unit?: 'thousands' | 'normal',
+  selectOptions?: Record<string, number>,
+  selectedOption?: string,
+  onSelectChange?: (key: string) => void,
 }) {
   const isThousands = unit === 'thousands';
   const multiplier = isThousands ? 1000 : 1;
@@ -72,6 +78,49 @@ export default function PerformanceOverlay({
               <span>{isThousands ? 'Low (1K)' : 'Low (1)'}</span>
               <span>Centralized State</span>
               <span>{isThousands ? 'Ultra (4M)' : 'High (1K)'}</span>
+            </div>
+          </div>
+        )}
+
+        {/* Select de opción única */}
+        {selectOptions && selectedOption !== undefined && onSelectChange && (
+          <div className="bg-white/5 px-6 py-3 border-t border-white/10 flex flex-col gap-3 rounded-3xl">
+            <label className="text-[12px] uppercase tracking-[0.15em] font-black text-white/50">
+              Tipo de Luz
+            </label>
+            <div className="flex flex-col gap-1.5">
+              {Object.entries(selectOptions).map(([key, value]) => {
+                const isActive = selectedOption === key;
+                return (
+                  <button
+                    key={key}
+                    onClick={() => onSelectChange(key)}
+                    className={`relative flex items-center justify-between px-4 py-2.5 rounded-2xl text-[11px] font-bold uppercase tracking-widest transition-all duration-300 cursor-pointer border ${
+                      isActive
+                        ? 'bg-indigo-500/20 border-indigo-500/50 text-indigo-300 shadow-[0_0_15px_rgba(99,102,241,0.15)]'
+                        : 'bg-white/[0.03] border-white/[0.06] text-white/40 hover:bg-white/[0.07] hover:text-white/60 hover:border-white/10'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={`w-3 h-3 rounded-full border-2 transition-all duration-300 flex items-center justify-center ${
+                        isActive ? 'border-indigo-400' : 'border-white/20'
+                      }`}>
+                        {isActive && (
+                          <div className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse" />
+                        )}
+                      </div>
+                      <span>{key}</span>
+                    </div>
+                    <span className={`text-[9px] font-mono px-2 py-0.5 rounded-full transition-all ${
+                      isActive
+                        ? 'bg-indigo-500/20 text-indigo-300'
+                        : 'bg-white/5 text-white/25'
+                    }`}>
+                      {value}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </div>
         )}

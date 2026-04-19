@@ -31,6 +31,13 @@ export default function TestDashboard() {
       icon: '💡'
     },
     {
+      id: 'shadows_stress',
+      title: 'Estrés de Sombras',
+      description: 'Prueba intensiva de GPU procesando múltiples fuentes de luz y sombras superpuestas.',
+      path: '/test/shadows_stress',
+      icon: '🌗'
+    },
+    {
       id: 'raycasting',
       title: 'Objetos - Eventos',
       description: 'Prueba el sistema de interactividad nativo en múltiples intersecciones concurrentes.',
@@ -65,13 +72,7 @@ export default function TestDashboard() {
       path: '/test/vram_stress',
       icon: '💽'
     },
-    {
-      id: 'shadows_stress',
-      title: 'Estrés de Sombras',
-      description: 'Prueba intensiva de GPU procesando múltiples fuentes de luz y sombras superpuestas.',
-      path: '/test/shadows_stress',
-      icon: '🌗'
-    },
+    
     {
       id: 'materials_stress',
       title: 'Materiales PBR Complejos',
