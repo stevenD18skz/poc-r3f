@@ -1,7 +1,7 @@
 'use client'
 
 import { Canvas, useFrame } from '@react-three/fiber'
-import { useState, useMemo, useRef, Suspense } from 'react'
+import { useState, useMemo, useRef, useEffect, Suspense } from 'react'
 import * as THREE from 'three'
 import PerformanceOverlay from '@/components/test/PerformanceOverlay'
 import DebugTools from '@/components/DebugTools'
@@ -19,7 +19,6 @@ import { OrbitControls } from '@react-three/drei'
 // Lo que mides: costo GPU de recalcular shadow maps cada frame
 // ─────────────────────────────────────────────
 
-// Spotlight que se mueve, CPU cost: solo 1 operación por frame
 function MovingSpotLight({
   index,
   total,
@@ -30,24 +29,21 @@ function MovingSpotLight({
   height?: number
 }) {
   const lightRef = useRef<THREE.SpotLight>(null!)
-  const targetRef = useRef<THREE.Object3D>(null!)
   const target = useMemo(() => new THREE.Object3D(), [])
 
   const baseAngle = (index / total) * Math.PI * 2
   const orbitRadius = 12
   const speed = 0.3 + index * 0.1
+  const color = `hsl(${(index / total) * 360}, 100%, 65%)`
 
   useFrame((state) => {
     const t = state.clock.getElapsedTime() * speed
     lightRef.current.position.x = Math.cos(t + baseAngle) * orbitRadius
     lightRef.current.position.z = Math.sin(t + baseAngle) * orbitRadius
     lightRef.current.position.y = height
-
-    // El foco apunta siempre al centro (0,0,0)
+    // El foco apunta siempre al centro
     target.position.set(0, 0, 0)
   })
-
-  const color = `hsl(${(index / total) * 360}, 100%, 65%)`
 
   return (
     <>
@@ -58,54 +54,43 @@ function MovingSpotLight({
         angle={Math.PI / 5}
         penumbra={0.3}
         castShadow
-        shadow-mapSize={[512, 512]} // Balance entre calidad y perf
+        shadow-mapSize={[512, 512]}
         shadow-bias={-0.0005}
         target={target}
-      />
-      <primitive object={target} />
+      >
+        {/* ✅ Hijo del spotLight: hereda su posición automáticamente */}
+        <mesh>
+          <sphereGeometry args={[0.2, 8, 8]} />
+          <meshBasicMaterial color={color} />
+        </mesh>
+      </spotLight>
 
-      {/* Esfera visual para ver la posición de la luz */}
-      <mesh position={[0, height, 0]}>
-        <sphereGeometry args={[0.2, 8, 8]} />
-        <meshBasicMaterial color={color} />
-      </mesh>
+      <primitive object={target} />
     </>
   )
 }
 
-// Cajas instanciadas ESTÁTICAS - 1 draw call, no toca useFrame
-// Los objetos no se mueven → CPU = 0 overhead
-// Las sombras se recalculan igual porque las LUCES se mueven
 function StaticBoxes({ count }: { count: number }) {
   const meshRef = useRef<THREE.InstancedMesh>(null!)
-  const tempObject = new THREE.Object3D()
 
-  // Posiciones calculadas una sola vez
+  // ✅ tempObject estable, no se recrea en cada render
+  const tempObject = useRef(new THREE.Object3D()).current
+
+  // Posiciones calculadas una sola vez por count
   const positions = useMemo(() => {
-    const list = []
-    for (let i = 0; i < count; i++) {
-      list.push({
-        x: (Math.random() - 0.5) * 24,
-        y: Math.random() * 6 + 0.5,
-        z: (Math.random() - 0.5) * 24,
-        rx: Math.random() * Math.PI,
-        ry: Math.random() * Math.PI,
-        scale: 0.5 + Math.random() * 1.0,
-      })
-    }
-    return list
+    return Array.from({ length: count }, () => ({
+      x: (Math.random() - 0.5) * 24,
+      y: Math.random() * 6 + 0.5,
+      z: (Math.random() - 0.5) * 24,
+      rx: Math.random() * Math.PI,
+      ry: Math.random() * Math.PI,
+      scale: 0.5 + Math.random() * 1.0,
+    }))
   }, [count])
 
-  // Solo se ejecuta cuando cambia count (no cada frame)
-  // biome-ignore: positions es el trigger intencional
-  const ref = useRef(false)
-  useMemo(() => {
-    ref.current = false
-  }, [count])
-
-  useFrame(() => {
-    if (ref.current || !meshRef.current) return
-    ref.current = true
+  // ✅ useEffect para inicializar matrices, no useFrame
+  useEffect(() => {
+    if (!meshRef.current) return
 
     positions.forEach((p, i) => {
       tempObject.position.set(p.x, p.y, p.z)
@@ -114,8 +99,9 @@ function StaticBoxes({ count }: { count: number }) {
       tempObject.updateMatrix()
       meshRef.current.setMatrixAt(i, tempObject.matrix)
     })
+
     meshRef.current.instanceMatrix.needsUpdate = true
-  })
+  }, [positions])
 
   return (
     <instancedMesh
@@ -133,18 +119,14 @@ function StaticBoxes({ count }: { count: number }) {
 function ShadowScene({ count }: { count: number }) {
   return (
     <>
-      {/* Ambient mínimo para que se vea algo en sombra */}
       <ambientLight intensity={0.2} />
 
-      {/* 3 SpotLights dinámicas con sombras */}
       <MovingSpotLight index={0} total={3} />
       <MovingSpotLight index={1} total={3} />
       <MovingSpotLight index={2} total={3} />
 
-      {/* Objetos estáticos que lanzan y reciben sombra */}
       <StaticBoxes count={count} />
 
-      {/* Piso que recibe sombras */}
       <mesh rotation-x={-Math.PI / 2} position={[0, 0, 0]} receiveShadow>
         <planeGeometry args={[60, 60]} />
         <meshStandardMaterial color="#1e293b" roughness={0.8} metalness={0.2} />
@@ -175,7 +157,6 @@ export default function ShadowsStressTest() {
         </Suspense>
       </Canvas>
 
-      {/* Info del test */}
       <div className="absolute bottom-6 left-6 bg-black bg-opacity-70 p-4 rounded-lg border border-yellow-500 text-white text-xs max-w-xs">
         <h3 className="font-bold text-yellow-400 mb-2">Especificaciones del test</h3>
         <ul className="space-y-1 text-gray-300">
