@@ -191,8 +191,8 @@ function Crosshair() {
   return (
     <div className="fixed inset-0 flex items-center justify-center pointer-events-none z-40">
       <div className="relative w-8 h-8">
-        <div className="absolute top-1/2 left-0 right-0 h-[1px] bg-white/60 -translate-y-1/2" />
-        <div className="absolute left-1/2 top-0 bottom-0 w-[1px] bg-white/60 -translate-x-1/2" />
+        <div className="absolute top-1/2 left-0 right-0 h-px bg-white/60 -translate-y-1/2" />
+        <div className="absolute left-1/2 top-0 bottom-0 w-px bg-white/60 -translate-x-1/2" />
         <div className="absolute top-1/2 left-1/2 w-1.5 h-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/80" />
       </div>
     </div>
