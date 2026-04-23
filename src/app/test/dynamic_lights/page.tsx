@@ -1,7 +1,7 @@
 'use client'
 
 import { Canvas, useFrame } from '@react-three/fiber'
-import { useRef, useState, Suspense } from 'react'
+import { useRef, useState, useMemo, Suspense } from 'react'
 import * as THREE from 'three'
 import PerformanceOverlay from '@/components/test/PerformanceOverlay'
 import DebugTools from '@/components/DebugTools'
@@ -54,6 +54,7 @@ function MovingPointLight({
   const radius = 8
 
   useFrame((state) => {
+    if (!ref.current) return
     const t = state.clock.getElapsedTime() * speed
     ref.current.position.x = Math.cos(t + angle) * radius
     ref.current.position.z = Math.sin(t + angle) * radius
@@ -91,29 +92,30 @@ function MovingSpotLight({
   speed: number
 }) {
   const ref = useRef<THREE.SpotLight>(null!)
-  const targetRef = useRef<THREE.Object3D>(null!)
+  // Creamos el target de forma persistente para que nunca sea null al pasarlo a la luz
+  const target = useMemo(() => new THREE.Object3D(), [])
 
   const angle = (index / total) * Math.PI * 2
   const radius = 10
 
   useFrame((state) => {
+    if (!ref.current) return
     const t = state.clock.getElapsedTime() * speed
     ref.current.position.x = Math.cos(t + angle) * radius
     ref.current.position.z = Math.sin(t + angle) * radius
     ref.current.position.y = 8 + Math.sin(t * 1.2 + angle) * 2
 
     // El target se mueve ligeramente para dar variación
-    if (targetRef.current) {
-      targetRef.current.position.x = Math.sin(t * 0.5 + angle) * 2
-      targetRef.current.position.z = Math.cos(t * 0.5 + angle) * 2
-      targetRef.current.position.y = 0
-    }
+    target.position.x = Math.sin(t * 0.5 + angle) * 2
+    target.position.z = Math.cos(t * 0.5 + angle) * 2
+    target.position.y = 0
   })
 
   const color = `hsl(${(index / total) * 360}, 100%, 60%)`
 
   return (
     <>
+      <primitive object={target} />
       <spotLight
         ref={ref}
         color={color}
@@ -124,7 +126,7 @@ function MovingSpotLight({
         castShadow
         shadow-bias={-0.001}
         shadow-mapSize={[256, 256]}
-        target={targetRef.current!}
+        target={target}
       >
         {/* Cono visual: identifica la posición del spot */}
         <mesh>
@@ -132,7 +134,6 @@ function MovingSpotLight({
           <meshBasicMaterial color={color} />
         </mesh>
       </spotLight>
-      <object3D ref={targetRef} />
     </>
   )
 }
@@ -152,6 +153,7 @@ function MovingDirectionalLight({
   const angle = (index / total) * Math.PI * 2
 
   useFrame((state) => {
+    if (!ref.current) return
     const t = state.clock.getElapsedTime() * speed
     ref.current.position.x = Math.cos(t + angle) * 15
     ref.current.position.z = Math.sin(t + angle) * 15
@@ -195,6 +197,7 @@ function MovingHemisphereLight({
   const ref = useRef<THREE.HemisphereLight>(null!)
 
   useFrame((state) => {
+    if (!ref.current) return
     const t = state.clock.getElapsedTime() * speed
     const hue = ((index / total) * 360 + t * 20) % 360
     ref.current.color.setHSL(hue / 360, 1, 0.6)
