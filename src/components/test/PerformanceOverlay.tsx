@@ -8,6 +8,7 @@ export default function PerformanceOverlay({
   count, 
   setCount,
   unit = 'thousands',
+  inputConfig,
   selectOptions,
   selectedOption,
   onSelectChange,
@@ -17,13 +18,33 @@ export default function PerformanceOverlay({
   count?: number,
   setCount?: (count: number) => void,
   unit?: 'thousands' | 'normal',
+  inputConfig?: {
+    unit: 'thousands' | 'normal',
+    type: 'increment' | 'power',
+    min: number,
+    max: number,
+  },
   selectOptions?: Record<string, number>,
   selectedOption?: string,
   onSelectChange?: (key: string) => void,
 }) {
-  const isThousands = unit === 'thousands';
+  const isThousands = (inputConfig?.unit || unit) === 'thousands';
   const multiplier = isThousands ? 1000 : 1;
   const unitLabel = isThousands ? 'TRIS' : 'OBJ';
+
+  // Configuración del slider
+  const type = inputConfig?.type || 'power';
+  const min = inputConfig?.min ?? 0;
+  const max = inputConfig?.max ?? (isThousands ? 12 : 10);
+
+  const getLabel = (val: number) => {
+    if (val >= 1000000) return `${(val / 1000000).toFixed(0)}M`;
+    if (val >= 1000) return `${(val / 1000).toFixed(0)}K`;
+    return val.toString();
+  };
+
+  const minVal = type === 'power' ? multiplier * Math.pow(2, min) : min;
+  const maxVal = type === 'power' ? multiplier * Math.pow(2, max) : max;
 
   return (
     <div className="fixed top-0 left-0 w-full h-full pointer-events-none z-50 p-6 flex justify-start items-start text-left">
@@ -65,19 +86,22 @@ export default function PerformanceOverlay({
             <div className="relative h-6 flex items-center">
               <input 
                 type="range" 
-                min="0" 
-                max={isThousands ? 12 : 10} 
+                min={min} 
+                max={max} 
                 step="1" 
                 className="w-full accent-blue-500 cursor-pointer h-1 bg-white/10 rounded-full appearance-none hover:bg-white/20 transition-colors"
-                value={Math.log2(count / multiplier)}
-                onChange={(e) => setCount(multiplier * Math.pow(2, Number(e.target.value)))}
+                value={type === 'power' ? Math.log2(count / multiplier) : count}
+                onChange={(e) => {
+                  const val = Number(e.target.value);
+                  setCount(type === 'power' ? multiplier * Math.pow(2, val) : val);
+                }}
               />
             </div>
             
             <div className="flex justify-between text-[8px] text-white/20 font-black uppercase tracking-widest">
-              <span>{isThousands ? 'Low (1K)' : 'Low (1)'}</span>
+              <span>{type === 'power' ? `Low (${getLabel(minVal)})` : `Min (${getLabel(minVal)})`}</span>
               <span>Centralized State</span>
-              <span>{isThousands ? 'Ultra (4M)' : 'High (1K)'}</span>
+              <span>{type === 'power' ? `High (${getLabel(maxVal)})` : `Max (${getLabel(maxVal)})`}</span>
             </div>
           </div>
         )}
