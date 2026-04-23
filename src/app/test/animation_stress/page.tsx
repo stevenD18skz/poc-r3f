@@ -72,7 +72,12 @@ export default function AnimationStressTest() {
         input={true}
         count={count}
         setCount={setCount}
-        unit="normal"
+        inputConfig={{
+          unit: 'normal',
+          type: 'power',
+          min: 0,
+          max: 12
+        }}
       />
 
       <Canvas camera={{ position: [0, 15, 25], fov: 50 }}>

@@ -70,7 +70,12 @@ export default function PostProcessingStressTest() {
         input={true} 
         count={count} 
         setCount={setCount} 
-        unit="normal"
+        inputConfig={{
+          unit: 'normal',
+          type: 'increment',
+          min: 1,
+          max: 500
+        }}
       />
 
       <Canvas camera={{ position: [0, 0, 30], fov: 45 }} shadows>

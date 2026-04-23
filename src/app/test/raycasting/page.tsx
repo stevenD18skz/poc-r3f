@@ -243,6 +243,12 @@ export default function RaycastTest() {
         input={true}
         count={count}
         setCount={setCount}
+        inputConfig={{
+          unit: 'normal',
+          type: 'increment',
+          min: 1,
+          max: 500
+        }}
       />
 
       <GameHUD

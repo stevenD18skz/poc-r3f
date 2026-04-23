@@ -66,7 +66,12 @@ export default function VramStressTest() {
         input={true} 
         count={numTextures} 
         setCount={setNumTextures} 
-        unit="normal"
+        inputConfig={{
+          unit: 'normal',
+          type: 'power',
+          min: 0,
+          max: 10
+        }}
       />
 
       <Canvas camera={{ position: [0, 0, 30], fov: 45 }}>

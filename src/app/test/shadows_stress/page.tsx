@@ -145,7 +145,12 @@ export default function ShadowsStressTest() {
         input={true}
         count={count}
         setCount={setCount}
-        unit="normal"
+        inputConfig={{
+          unit: 'normal',
+          type: 'increment',
+          min: 1,
+          max: 1024
+        }}
       />
 
       <Canvas camera={{ position: [0, 20, 35], fov: 50 }} shadows>

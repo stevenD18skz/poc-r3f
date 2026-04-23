@@ -80,7 +80,13 @@ export default function TrianglesRotatingTest() {
         title={`${count} Triángulos Rotando`} 
         input={true} 
         count={count} 
-        setCount={setCount} 
+        setCount={setCount}
+        inputConfig={{
+          unit: 'thousands',
+          type: 'power',
+          min: 0,
+          max: 12
+        }}
       />
 
       <Canvas

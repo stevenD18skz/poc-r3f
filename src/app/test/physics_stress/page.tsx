@@ -208,7 +208,12 @@ export default function PhysicsStressTest() {
         input={true}
         count={count}
         setCount={setCount}
-        unit="normal"
+        inputConfig={{
+          unit: 'normal',
+          type: 'increment',
+          min: 1,
+          max: 1024
+        }}
       />
 
       <Canvas

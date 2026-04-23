@@ -393,6 +393,12 @@ export default function NpcAiTest() {
         input={true}
         count={npcCount}
         setCount={setNpcCount}
+        inputConfig={{
+          unit: 'normal',
+          type: 'increment',
+          min: 1,
+          max: 20
+        }}
       />
 
       <NetworkMetricsHUD metrics={metrics} npcCount={npcCount} />

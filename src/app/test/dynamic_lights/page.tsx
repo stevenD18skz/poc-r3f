@@ -368,11 +368,13 @@ export default function DynamicLightsTest() {
         input={true}
         count={count}
         setCount={setCount}
-        inputConfig={{
+        inputConfig={
+          
+          {
           unit: 'normal',
           type: 'increment',
           min: 1,
-          max: 50
+          max: 16
         }}
         selectOptions={selectOptions}
         selectedOption={selectedLightType}
