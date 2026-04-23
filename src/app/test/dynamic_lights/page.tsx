@@ -232,39 +232,39 @@ function StaticScene() {
       </mesh>
       <mesh position={[0, 1.5, -4]} castShadow receiveShadow>
         <boxGeometry args={[2, 3, 2]} />
-        <meshStandardMaterial color="#8b5cf6" roughness={0.4} metalness={0.3} />
+        <meshStandardMaterial color="#8b5cf6" roughness={0.4} metalness={0.6} />
       </mesh>
       <mesh position={[4, 1, -4]} castShadow receiveShadow>
         <boxGeometry args={[2, 2, 2]} />
-        <meshStandardMaterial color="#a78bfa" roughness={0.4} metalness={0.3} />
+        <meshStandardMaterial color="#a78bfa" roughness={0.4} metalness={0.9} />
       </mesh>
 
       {/* 3 Spheres */}
       <mesh position={[-4, 1, 0]} castShadow receiveShadow>
         <sphereGeometry args={[1, 32, 32]} />
-        <meshStandardMaterial color="#ec4899" roughness={0.2} metalness={0.7} />
+        <meshStandardMaterial color="#ec4899" roughness={0.2} metalness={0.5} />
       </mesh>
       <mesh position={[0, 1, 0]} castShadow receiveShadow>
         <sphereGeometry args={[1, 32, 32]} />
-        <meshStandardMaterial color="#f43f5e" roughness={0.2} metalness={0.7} />
+        <meshStandardMaterial color="#f43f5e" roughness={0.2} metalness={0.75} />
       </mesh>
       <mesh position={[4, 1, 0]} castShadow receiveShadow>
         <sphereGeometry args={[1, 32, 32]} />
-        <meshStandardMaterial color="#fb7185" roughness={0.2} metalness={0.7} />
+        <meshStandardMaterial color="#fb7185" roughness={0.2} metalness={1} />
       </mesh>
 
       {/* 3 Cylinders */}
       <mesh position={[-4, 1.5, 4]} castShadow receiveShadow>
         <cylinderGeometry args={[0.8, 0.8, 3, 32]} />
-        <meshStandardMaterial color="#06b6d4" roughness={0.3} metalness={0.5} />
+        <meshStandardMaterial color="#06b6d4" roughness={0.3} metalness={1} />
       </mesh>
       <mesh position={[0, 1.5, 4]} castShadow receiveShadow>
         <cylinderGeometry args={[0.8, 0.8, 3, 32]} />
-        <meshStandardMaterial color="#0ea5e9" roughness={0.3} metalness={0.5} />
+        <meshStandardMaterial color="#0ea5e9" roughness={0.3} metalness={2} />
       </mesh>
       <mesh position={[4, 1.5, 4]} castShadow receiveShadow>
         <cylinderGeometry args={[0.8, 0.8, 3, 32]} />
-        <meshStandardMaterial color="#38bdf8" roughness={0.3} metalness={0.5} />
+        <meshStandardMaterial color="#38bdf8" roughness={0.3} metalness={3} />
       </mesh>
     </>
   )
@@ -374,7 +374,7 @@ export default function DynamicLightsTest() {
           unit: 'normal',
           type: 'increment',
           min: 1,
-          max: 16
+          max: 15
         }}
         selectOptions={selectOptions}
         selectedOption={selectedLightType}
@@ -396,7 +396,7 @@ export default function DynamicLightsTest() {
         </Suspense>
       </Canvas>
 
-      {/* Info del test */}
+      {/* Info del test
       <div className="absolute bottom-32 left-6 bg-black bg-opacity-70 p-4 rounded-lg border border-purple-500 text-white text-xs max-w-xs">
         <h3 className="font-bold text-purple-400 mb-2">Especificaciones del test</h3>
         <ul className="space-y-1 text-gray-300">
@@ -408,7 +408,7 @@ export default function DynamicLightsTest() {
           <li>• Todas con shadow casting{selectedLightType === 'HemisphereLight' ? ' (N/A)' : ''}</li>
           <li>• Shadow map: 256×256 por luz</li>
         </ul>
-      </div>
+      </div>*/}
     </main>
   )
 }
