@@ -324,10 +324,10 @@ function DynamicLights({ lightCount, lightType }: { lightCount: number; lightTyp
 function LightingScene({ lightCount, lightType }: { lightCount: number; lightType: string }) {
   return (
     <>
-      {/* Luz ambiental base - misma en Babylon */}
-      <ambientLight intensity={0.3} />
+      {/* Luz ambiental base - misma en Babylon 
+      <ambientLight intensity={0.3} />*/}
 
-      {/* Luz direccional fija (simula sol) - misma en Babylon */}
+      {/* Luz direccional fija (simula sol) - misma en Babylon 
       <directionalLight
         position={[10, 20, 10]}
         intensity={1.0}
@@ -338,7 +338,7 @@ function LightingScene({ lightCount, lightType }: { lightCount: number; lightTyp
         shadow-camera-top={20}
         shadow-camera-bottom={-20}
         shadow-bias={-0.0005}
-      />
+      />*/}
 
       {/* N Luces dinámicas del tipo seleccionado */}
       <DynamicLights lightCount={lightCount} lightType={lightType} />
