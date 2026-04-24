@@ -228,7 +228,7 @@ function NetworkMetricsHUD({ metrics, npcCount }: { metrics: ApiMetrics; npcCoun
     : 100
 
   return (
-    <div className="fixed top-6 right-6 z-50 flex flex-col gap-2 min-w-[180px]">
+    <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-2 min-w-[180px]">
       <div className="bg-black/80 backdrop-blur border border-blue-500/40 px-4 py-3 rounded-xl">
         <p className="text-gray-400 text-xs uppercase tracking-widest mb-1">NPCs Activos</p>
         <p className="text-2xl font-mono font-black text-blue-400">{npcCount}</p>
@@ -315,19 +315,26 @@ export default function NpcAiTest() {
 
   // Loop de IA para un NPC
   const runNpcLoop = useCallback(
-    async (id: number) => {
+    async (id: number, signal: AbortSignal) => {
       // Pequeño delay inicial para escalonar las requests
       await new Promise((r) => setTimeout(r, id * 500))
 
-      while (true) {
-        // Obtener estado actual desde ref (evita closure stale)
-        let currentState: NpcState | undefined
-        setNpcStates((prev) => {
-          currentState = prev.find((s) => s.id === id)
+      while (!signal.aborted) {
+        // Obtenemos el estado más fresco mediante un truco de ref o simplemente
+        // confiando en que el loop de fetch lo manejará.
+        // Pero para enviar el estado actual a la API:
+        let currentAction: NpcAction = 'idle'
+        let currentPos = { x: 0, z: 0 }
+        
+        // Usamos el callback de set para leer sin disparar re-render extra
+        setNpcStates(prev => {
+          const npc = prev.find(s => s.id === id)
+          if (npc) {
+            currentAction = npc.action
+            currentPos = npc.targetPosition
+          }
           return prev
         })
-
-        await new Promise((r) => setTimeout(r, 0)) // Flush state
 
         updateNpc(id, { thinking: true, error: false })
 
@@ -335,13 +342,16 @@ export default function NpcAiTest() {
 
         try {
           await globalQueue.add(async () => {
+            if (signal.aborted) return
+
             const res = await fetch('/api/npc', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                currentAction: currentState?.action ?? 'idle',
-                position: { x: 0, y: 0, z: 0 },
+                currentAction,
+                position: { x: currentPos.x, y: 0, z: currentPos.z },
               }),
+              signal // Pasamos el signal al fetch
             })
 
             const latency = Math.round(performance.now() - t0)
@@ -349,24 +359,31 @@ export default function NpcAiTest() {
             if (!res.ok) throw new Error(`HTTP ${res.status}`)
 
             const data = await res.json()
+            if (signal.aborted) return
+
             recordRequest(true, latency)
             updateNpc(id, {
               action: data.action as NpcAction,
               thinking: false,
               error: false,
               targetPosition: data.targetPosition ?? { x: 0, z: 0 },
-              requestCount: (currentState?.requestCount ?? 0) + 1,
               lastLatency: latency,
             })
           })
-        } catch (err) {
+        } catch (err: any) {
+          if (err.name === 'AbortError') return
+          
           const latency = Math.round(performance.now() - t0)
           recordRequest(false, latency)
           updateNpc(id, { thinking: false, error: true, lastLatency: latency })
         }
 
         // Espera entre decisiones (simula tiempo de "pensamiento")
-        await new Promise((r) => setTimeout(r, 3000 + Math.random() * 2000))
+        const waitTime = 3000 + Math.random() * 2000
+        await new Promise((r) => {
+          const timeout = setTimeout(r, waitTime)
+          signal.addEventListener('abort', () => clearTimeout(timeout), { once: true })
+        })
       }
     },
     [updateNpc, recordRequest]
@@ -375,16 +392,14 @@ export default function NpcAiTest() {
   // Iniciar loops cuando los NPCs están listos
   useEffect(() => {
     if (npcStates.length === 0) return
-    const controllers: AbortController[] = []
+    const ac = new AbortController()
 
     npcStates.forEach((s) => {
-      const ac = new AbortController()
-      controllers.push(ac)
-      runNpcLoop(s.id)
+      runNpcLoop(s.id, ac.signal)
     })
 
-    return () => controllers.forEach((c) => c.abort())
-  }, [npcCount]) // Solo re-lanzar si cambia el count
+    return () => ac.abort()
+  }, [npcStates.length, runNpcLoop])
 
   return (
     <main className="relative w-full h-screen bg-[#050505] overflow-hidden">
@@ -395,9 +410,9 @@ export default function NpcAiTest() {
         setCount={setNpcCount}
         inputConfig={{
           unit: 'normal',
-          type: 'increment',
+          type: 'power',
           min: 1,
-          max: 20
+          max: 12
         }}
       />
 
@@ -411,7 +426,7 @@ export default function NpcAiTest() {
         </Suspense>
       </Canvas>
 
-      {/* Info del test */}
+      {/* Info del test 
       <div className="absolute bottom-6 left-6 bg-black/70 p-4 rounded-lg border border-cyan-500 text-white text-xs max-w-xs">
         <h3 className="font-bold text-cyan-400 mb-2">Especificaciones del test</h3>
         <ul className="space-y-1 text-gray-300">
@@ -425,7 +440,7 @@ export default function NpcAiTest() {
               <span className="text-red-400">■</span> Error
           </li>
         </ul>
-      </div>
+      </div>*/}
     </main>
   )
 }

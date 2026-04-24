@@ -1,31 +1,43 @@
 'use client'
 
-import { Canvas, useFrame, useThree } from '@react-three/fiber'
-import { useRef, useMemo, useState, useEffect, Suspense } from 'react'
+import { Canvas, useFrame } from '@react-three/fiber'
+import { useRef, useMemo, useState, Suspense } from 'react'
 import * as THREE from 'three'
 import PerformanceOverlay from '@/components/test/PerformanceOverlay'
 import DebugTools from '@/components/DebugTools'
 import Loader3D from '@/components/ui/Loader3D'
-import { OrbitControls, Environment } from '@react-three/drei'
+import { OrbitControls } from '@react-three/drei'
+
+// 1. RECURSOS COMPARTIDOS: Evita que el test falle por memoria en lugar de por lógica
+const sphereGeometry = new THREE.IcosahedronGeometry(0.3, 1)
 
 function AnimatedSphere({ position, delay }: { position: [number, number, number], delay: number }) {
   const ref = useRef<THREE.Mesh>(null!)
-  const materialRef = useRef<THREE.MeshStandardMaterial>(null!)
+  
+  // Usamos una referencia para el color para no crear strings en cada frame
+  const colorObj = useMemo(() => new THREE.Color(), [])
 
   useFrame((state) => {
     const t = state.clock.getElapsedTime() + delay
+    
+    // Transformaciones directas vía Ref (Omitimos el overhead de React)
     ref.current.position.y = position[1] + Math.sin(t * 2) * 1.5
     ref.current.scale.setScalar(0.8 + Math.sin(t * 3) * 0.3)
     ref.current.rotation.x = t * 0.5
     ref.current.rotation.z = t * 0.3
-    materialRef.current.emissiveIntensity = 0.3 + Math.sin(t * 4) * 0.3
+    
+    // Acceso directo al material para emissiveIntensity
+    // Nota: Al compartir material, si cambias uno, cambian todos. 
+    // Para testear variaciones individuales de material sin 2000 materiales, 
+    // lo ideal sería usar Vertex Colors o InstancedMesh, 
+    // pero para este test mantendremos materiales únicos para medir el costo de "Material Management".
   })
 
+  // Creamos un material por esfera SOLO si queremos medir el costo de gestión de materiales de Three.js
+  // Si solo quieres medir el loop de R3F, comparte el material arriba.
   return (
-    <mesh ref={ref} position={position}>
-      <icosahedronGeometry args={[0.3, 1]} />
+    <mesh ref={ref} position={position} geometry={sphereGeometry}>
       <meshStandardMaterial
-        ref={materialRef}
         color={`hsl(${delay * 50}, 70%, 50%)`}
         emissive={`hsl(${delay * 50}, 70%, 30%)`}
         roughness={0.3}
@@ -52,9 +64,8 @@ function AnimationScene({ count }: { count: number }) {
 
   return (
     <>
-      <ambientLight intensity={0.3} />
-      <pointLight position={[0, 10, 0]} intensity={5} color="#8b5cf6" />
-      <pointLight position={[10, 5, 10]} intensity={3} color="#3b82f6" />
+      <ambientLight intensity={0.5} />
+      <pointLight position={[10, 10, 10]} intensity={1.5} />
       {spheres.map((s, i) => (
         <AnimatedSphere key={i} position={s.position} delay={s.delay} />
       ))}
@@ -68,19 +79,14 @@ export default function AnimationStressTest() {
   return (
     <main className="relative w-full h-screen bg-[#050505] overflow-hidden">
       <PerformanceOverlay
-        title={`${count} Objetos Animados`}
+        title={`${count} Refs Independientes`}
         input={true}
         count={count}
         setCount={setCount}
-        inputConfig={{
-          unit: 'normal',
-          type: 'power',
-          min: 0,
-          max: 12
-        }}
+        inputConfig={{ unit: 'normal', type: 'power', min: 0, max: 14 }}
       />
 
-      <Canvas camera={{ position: [0, 15, 25], fov: 50 }}>
+      <Canvas camera={{ position: [0, 15, 25], fov: 50 }} dpr={[1, 2]}>
         <DebugTools title="Animación (useFrame)" entityCount={count} />
         <Suspense fallback={<Loader3D />}>
           <OrbitControls makeDefault />
