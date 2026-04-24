@@ -239,7 +239,7 @@ export default function ShadowsStressTest() {
           unit: 'normal',
           type: 'power',
           min: 0,
-          max: 13,
+          max: 19,
         }}
       >
         <div className="bg-white/5 px-6 py-3 border-t border-white/10 flex flex-col gap-4 rounded-3xl mt-4">
