@@ -6,7 +6,7 @@ import * as THREE from 'three'
 import PerformanceOverlay from '@/components/test/PerformanceOverlay'
 import DebugTools from '@/components/DebugTools'
 import Loader3D from '@/components/ui/Loader3D'
-import { OrbitControls } from '@react-three/drei'
+import { OrbitControls, } from '@react-three/drei'
 
 // ─────────────────────────────────────────────
 // PARÁMETROS DEL TEST (deben ser idénticos en Babylon)
@@ -18,7 +18,7 @@ import { OrbitControls } from '@react-three/drei'
 // simultáneamente → más fill de shadow maps por frame
 // ─────────────────────────────────────────────
 
-const ARENA = { w: 32, h: 24, d: 32 } // Dimensiones de la arena
+const ARENA = { w: 32, h: 32, d: 32 } // Dimensiones de la arena
 const WALL_THICKNESS = 0.5
 
 // SpotLight que orbita DENTRO de la arena apuntando hacia abajo-frente
@@ -31,7 +31,7 @@ function InternalSpotLight({
   total: number
   isStatic?: boolean
 }) {
-  const lightRef = useRef<THREE.PointLight>(null!)
+  const lightRef = useRef<THREE.SpotLight>(null!)
   const target = useMemo(() => new THREE.Object3D(), [])
 
   // Cálculo de posición estática: divide el ancho de la arena en 'total' partes
@@ -40,17 +40,24 @@ function InternalSpotLight({
     return -ARENA.w / 2 + (ARENA.w / total) * (index + 0.5)
   }, [index, total])
 
-  const color = `hsl(${(index / total) * 360}, 80%, 85%)`
+  const color = `hsl(195, 30%, 95%)`
 
-  useFrame((state) => {
-    if (isStatic) {
+  useEffect(() => {
+    if (isStatic && lightRef.current) {
       lightRef.current.position.x = staticX
       lightRef.current.position.z = 0
       lightRef.current.position.y = ARENA.h * 0.55
-      return
+      
+      // Posición estática del target
+      target.position.set(staticX, 0, 0)
+      target.updateMatrixWorld()
     }
+  }, [isStatic, staticX, target])
 
-    const t = state.clock.getElapsedTime() * 0
+  useFrame((state) => {
+    if (isStatic) return
+
+    const t = state.clock.getElapsedTime() * 1
     const baseAngle = (index / total) * Math.PI * 2
     const orbitRadius = ARENA.w * 0.28
 
@@ -69,24 +76,24 @@ function InternalSpotLight({
 
   return (
     <>
-      <pointLight
+      <spotLight
         ref={lightRef}
         color={color}
-        intensity={128}
-        // angle={Math.PI / 2}   // Cono amplio para iluminar más superficies
-        //penumbra={0.4}
+        intensity={512}
+        angle={Math.PI / 4}
+        penumbra={0.4}
         distance={ARENA.w * 4}
         castShadow
-        shadow-mapSize={[2048, 2048]}
+        shadow-mapSize={[512, 512]}
         shadow-bias={-0.0005}
-        //target={target}
+        target={target}
       >
         {/* Esfera visual que se mueve con la luz */}
         <mesh>
           <sphereGeometry args={[0.2, 8, 8]} />
           <meshBasicMaterial color={color} />
         </mesh>
-      </pointLight>
+      </spotLight>
       <primitive object={target} />
     </>
   )
@@ -98,60 +105,43 @@ function InternalSpotLight({
 // Todas las superficies reciben sombras
 // ─────────────────────────────────────────────
 function Arena() {
-  const wallMat = (
-    <meshStandardMaterial
-      color="#1e293b"
-      roughness={0.85}
-      metalness={0.1}
-      side={THREE.BackSide} // Renderizar cara interior
-    />
-  )
-
-  const floorMat = (
-    <meshStandardMaterial
-      color="#0f172a"
-      roughness={0.9}
-      metalness={0.15}
-    />
-  )
-
   return (
     <group>
       {/* Suelo */}
-      <mesh rotation-x={-Math.PI / 2} position={[0, 0, 0]} receiveShadow>
-        <planeGeometry args={[ARENA.w, ARENA.d]} />
-        {floorMat}
+      <mesh  position={[0, 0, 0]} receiveShadow castShadow>
+        <boxGeometry args={[ARENA.w, WALL_THICKNESS, ARENA.d]} />
+        <meshStandardMaterial color="#444" roughness={1} metalness={0.1} />
       </mesh>
 
       {/* Pared norte */}
       <mesh position={[0, ARENA.h / 2, -ARENA.d / 2]} receiveShadow castShadow>
         <boxGeometry args={[ARENA.w, ARENA.h, WALL_THICKNESS]} />
-        <meshStandardMaterial color="#1e293b" roughness={0.85} metalness={0.1} />
+        <meshStandardMaterial color="#444" roughness={1} metalness={0.1} />
       </mesh>
 
       {/* Pared sur */}
       <mesh position={[0, ARENA.h / 2, ARENA.d / 2]} receiveShadow castShadow>
         <boxGeometry args={[ARENA.w, ARENA.h, WALL_THICKNESS]} />
-        <meshStandardMaterial color="#1e293b" roughness={0.85} metalness={0.1} />
+        <meshStandardMaterial color="#444" roughness={1} metalness={0.1} />
       </mesh>
 
       {/* Pared oeste */}
       <mesh position={[-ARENA.w / 2, ARENA.h / 2, 0]} receiveShadow castShadow>
         <boxGeometry args={[WALL_THICKNESS, ARENA.h, ARENA.d]} />
-        <meshStandardMaterial color="#1e293b" roughness={0.85} metalness={0.1} />
+        <meshStandardMaterial color="#444" roughness={1} metalness={0.1} />
       </mesh>
 
       {/* Pared este */}
       <mesh position={[ARENA.w / 2, ARENA.h / 2, 0]} receiveShadow castShadow>
         <boxGeometry args={[WALL_THICKNESS, ARENA.h, ARENA.d]} />
-        <meshStandardMaterial color="#1e293b" roughness={0.85} metalness={0.1} />
+        <meshStandardMaterial color="#444" roughness={1} metalness={0.1} />
       </mesh>
 
-      {/* Techo completo */}
+      {/* Techo completo 
       <mesh position={[0, ARENA.h, 0]} receiveShadow castShadow>
         <boxGeometry args={[ARENA.w, WALL_THICKNESS, ARENA.d]} />
-        <meshStandardMaterial color="#0f172a" roughness={0.9} metalness={0.1} />
-      </mesh>
+        <meshStandardMaterial color="#444" roughness={1} metalness={0.1} />
+      </mesh>*/}
     </group>
   )
 }
@@ -165,7 +155,7 @@ function StaticBoxes({ count }: { count: number }) {
     return Array.from({ length: count }, () => ({
       // Mantener dentro de la arena con margen
       x: (Math.random() - 0.5) * (ARENA.w - 4),
-      y: Math.random() * 20 + 0.5,
+      y: Math.random() * (ARENA.h - 1) + 0.5,
       z: (Math.random() - 0.5) * (ARENA.d - 4),
       rx: Math.random() * Math.PI,
       ry: Math.random() * Math.PI,
@@ -192,33 +182,33 @@ function StaticBoxes({ count }: { count: number }) {
       castShadow
       receiveShadow
     >
-      <boxGeometry args={[1, 1, 1]} />
+      <boxGeometry args={[0.4, 0.4, 0.4]} />
       <meshStandardMaterial color="#94a3b8" roughness={0.5} metalness={0.15} />
     </instancedMesh>
   )
 }
 
-function ShadowScene({ 
-  count, 
-  lightCount = 3, 
-  isStatic = false 
-}: { 
-  count: number, 
-  lightCount?: number, 
-  isStatic?: boolean 
+function ShadowScene({
+  count,
+  lightCount = 3,
+  isStatic = false
+}: {
+  count: number,
+  lightCount?: number,
+  isStatic?: boolean
 }) {
   return (
     <>
       {/* Ambient mínimo: la escena debe verse mayormente por las spotlights */}
-      <ambientLight intensity={0} />
+      <ambientLight intensity={0.3} />
 
       {/* Generar luces dinámicamente */}
       {Array.from({ length: lightCount }).map((_, i) => (
-        <InternalSpotLight 
-          key={i} 
-          index={i} 
-          total={lightCount} 
-          isStatic={isStatic} 
+        <InternalSpotLight
+          key={i}
+          index={i}
+          total={lightCount}
+          isStatic={isStatic}
         />
       ))}
 
@@ -233,9 +223,20 @@ function ShadowScene({
 
 export default function ShadowsStressTest() {
   const [count, setCount] = useState(64)
+  const [lightCount, setLightCount] = useState(1)
+  const [isStatic, setIsStatic] = useState(false)
 
   return (
     <main className="relative w-full h-screen bg-[#050505] overflow-hidden">
+      <Canvas camera={{ position: [0, ARENA.h * 1.5, 0.1], fov: 75 }} shadows>
+        <DebugTools title="Estrés de Sombras (Arena)" entityCount={count} />
+
+        <Suspense fallback={<Loader3D />}>
+          <OrbitControls makeDefault />
+          <ShadowScene count={count} lightCount={lightCount} isStatic={isStatic} />
+        </Suspense>
+      </Canvas>
+
       <PerformanceOverlay
         title={`Sombras: ${count} Objetos en Arena`}
         input={true}
@@ -247,28 +248,35 @@ export default function ShadowsStressTest() {
           min: 0,
           max: 13,
         }}
-      />
+      >
+        <div className="bg-white/5 px-6 py-3 border-t border-white/10 flex flex-col gap-4 rounded-3xl mt-4">
+          <div className="flex justify-between items-center mb-1">
+            <label className="text-[12px] uppercase tracking-[0.15em] font-black text-white/50">Luces</label>
+            <span className="text-[16px] font-mono text-yellow-400 font-bold bg-yellow-500/15 px-3 py-1 rounded-full border border-yellow-500/30 shadow-inner">
+              {lightCount} <span className="text-[8px] opacity-70 ml-1">LIT</span>
+            </span>
+          </div>
+          
+          <div className="relative h-6 flex items-center">
+            <input 
+              type="range" 
+              min="1" 
+              max="15" 
+              step="1" 
+              className="w-full accent-yellow-500 cursor-pointer h-1 bg-white/10 rounded-full appearance-none hover:bg-white/20 transition-colors"
+              value={lightCount}
+              onChange={(e) => setLightCount(Number(e.target.value))}
+            />
+          </div>
 
-      <Canvas camera={{ position: [0, ARENA.h * 1.4, ARENA.d * 1.1], fov: 50 }} shadows>
-        <DebugTools title="Estrés de Sombras (Arena)" entityCount={count} />
-
-        <Suspense fallback={<Loader3D />}>
-          <OrbitControls makeDefault />
-          <ShadowScene count={count} lightCount={6} isStatic={true} />
-        </Suspense>
-      </Canvas>
-
-      <div className="absolute bottom-6 left-6 bg-black bg-opacity-70 p-4 rounded-lg border border-yellow-500 text-white text-xs max-w-xs">
-        <h3 className="font-bold text-yellow-400 mb-2">Especificaciones del test</h3>
-        <ul className="space-y-1 text-gray-300">
-          <li>• Objetos: {count} cajas estáticas (1 draw call)</li>
-          <li>• Arena: suelo + 4 paredes + techo parcial</li>
-          <li>• Luces: 3 SpotLights internas dinámicas</li>
-          <li>• Shadow maps: 512×512 por luz</li>
-          <li>• Sombras sobre: suelo + paredes + cajas</li>
-          <li>• CPU overhead: solo 3 movimientos de luz/frame</li>
-        </ul>
-      </div>
+          <div className="flex justify-between items-center mt-2 group cursor-pointer" onClick={() => setIsStatic(!isStatic)}>
+            <label className="text-[12px] uppercase tracking-[0.15em] font-black text-white/50 cursor-pointer">Movimiento</label>
+            <div className={`w-12 h-6 rounded-full p-1 transition-all duration-300 ${isStatic ? 'bg-white/10' : 'bg-green-500/40'}`}>
+              <div className={`w-4 h-4 rounded-full bg-white transition-all duration-300 ${isStatic ? 'translate-x-0 opacity-40' : 'translate-x-6 shadow-[0_0_10px_white]'}`} />
+            </div>
+          </div>
+        </div>
+      </PerformanceOverlay>
     </main>
   )
 }

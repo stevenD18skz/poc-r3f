@@ -1,6 +1,8 @@
 'use client'
 
 import Link from 'next/link'
+import { ReactNode } from 'react'
+
 
 export default function PerformanceOverlay({ 
   title, 
@@ -12,6 +14,7 @@ export default function PerformanceOverlay({
   selectOptions,
   selectedOption,
   onSelectChange,
+  children,
 }: { 
   title: string, 
   input?: boolean,
@@ -27,6 +30,7 @@ export default function PerformanceOverlay({
   selectOptions?: Record<string, number>,
   selectedOption?: string,
   onSelectChange?: (key: string) => void,
+  children?: ReactNode,
 }) {
   const isThousands = (inputConfig?.unit || unit) === 'thousands';
   const multiplier = isThousands ? 1000 : 1;
@@ -47,9 +51,11 @@ export default function PerformanceOverlay({
   const maxVal = type === 'power' ? multiplier * Math.pow(2, max) : max;
 
   return (
-    <div className="fixed top-0 left-0 w-full h-full pointer-events-none z-50 p-6 flex justify-start items-start text-left">
-      {/* Panel Único Consolidado en la Izquierda */}
-      <div className="bg-black/85 backdrop-blur-2xl border border-white/10 p-1 rounded-3xl pointer-events-auto shadow-[0_20px_50px_rgba(0,0,0,0.5)] ring-1 ring-white/10 w-80 overflow-hidden flex flex-col transition-all duration-500 ease-in-out">
+    <div className="fixed top-0 left-0 w-full h-full pointer-events-none z-[100] p-6">
+      {/* Contenedor del Panel (alineado a la izquierda) */}
+      <div className="flex justify-start items-start w-full h-full pointer-events-none">
+        {/* Panel Único Consolidado en la Izquierda */}
+        <div className="bg-black/85 backdrop-blur-2xl border border-white/10 p-1 rounded-3xl pointer-events-auto shadow-[0_20px_50px_rgba(0,0,0,0.5)] ring-1 ring-white/10 w-80 overflow-hidden flex flex-col transition-all duration-500 ease-in-out">
         
         {/* Superior: Botón Volver integrado */}
         <div className="p-2 border-b border-white/5">
@@ -148,6 +154,10 @@ export default function PerformanceOverlay({
             </div>
           </div>
         )}
+        
+        {/* Otros elementos inyectados (children) */}
+        {children}
+        </div>
       </div>
     </div>
   )
