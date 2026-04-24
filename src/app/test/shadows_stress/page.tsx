@@ -149,7 +149,7 @@ export default function ShadowsStressTest() {
           unit: 'normal',
           type: 'increment',
           min: 1,
-          max: 1024
+          max: 128000
         }}
       />
 
@@ -161,18 +161,6 @@ export default function ShadowsStressTest() {
           <ShadowScene count={count} />
         </Suspense>
       </Canvas>
-
-      <div className="absolute bottom-6 left-6 bg-black bg-opacity-70 p-4 rounded-lg border border-yellow-500 text-white text-xs max-w-xs">
-        <h3 className="font-bold text-yellow-400 mb-2">Especificaciones del test</h3>
-        <ul className="space-y-1 text-gray-300">
-          <li>• Objetos: {count} cajas estáticas (1 draw call)</li>
-          <li>• Luces: 3 SpotLights dinámicas</li>
-          <li>• Shadow maps: 512×512 por luz</li>
-          <li>• Shadow renders por frame: 3</li>
-          <li>• CPU overhead: mínimo (solo movimiento de luces)</li>
-          <li>• Cuello de botella: GPU shadow rendering</li>
-        </ul>
-      </div>
     </main>
   )
 }

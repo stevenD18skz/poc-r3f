@@ -1,13 +1,11 @@
 'use client'
 
-import { Canvas } from '@react-three/fiber'
+import { Canvas, useFrame } from '@react-three/fiber'
 import { useRef, useEffect, useState, Suspense } from 'react'
 import * as THREE from 'three'
 import PerformanceOverlay from '@/components/test/PerformanceOverlay'
 import DebugTools from '@/components/DebugTools'
-import { OrbitControls } from '@react-three/drei'
-
-import Loader3D from '@/components/ui/Loader3D'
+import { OrbitControls, Sparkles, Environment } from '@react-three/drei'
 
 function InstancedTriangles({ count = 10000 }) {
   const meshRef = useRef<THREE.InstancedMesh>(null!)
@@ -15,7 +13,7 @@ function InstancedTriangles({ count = 10000 }) {
 
   useEffect(() => {
     for (let i = 0; i < count; i++) {
-      const radius = 10 + Math.random() * 40
+      const radius = 10 + Math.random() * 15
       const theta = Math.random() * Math.PI * 2
       const phi = Math.random() * Math.PI
       
@@ -35,11 +33,16 @@ function InstancedTriangles({ count = 10000 }) {
     meshRef.current.instanceMatrix.needsUpdate = true
     if (meshRef.current.instanceColor) meshRef.current.instanceColor.needsUpdate = true
   }, [count])
- 
+
+  // Optional: Gentle vibration/oscillation
+  useFrame((state) => {
+    const t = state.clock.getElapsedTime()
+    meshRef.current.rotation.y = t * 0.05
+  })
 
   return (
     <instancedMesh ref={meshRef} args={[null!, null!, count]}>
-      <coneGeometry args={[0.2, 0.4, 8]} />
+      <coneGeometry args={[0.1, 0.2, 3]} />
       <meshStandardMaterial />
     </instancedMesh>
   )
@@ -54,23 +57,16 @@ export default function TrianglesStaticTest() {
         title={`${count} Triángulos Estáticos`} 
         input={true} 
         count={count} 
-        setCount={setCount}
-        inputConfig={{
-          unit: 'thousands',
-          type: 'power',
-          min: 0,
-          max: 12
-        }}
+        setCount={setCount} 
       />
 
-      <Canvas 
-        camera={{ position: [120, 0, 0], fov: 50 }}
-      > 
-          <DebugTools title="Triángulos Estáticos" entityCount={count} />
-
-          <Suspense fallback={<Loader3D />}>
-            <OrbitControls makeDefault />
-            <ambientLight intensity={1} />
+      <Canvas camera={{ position: [20, 20, 20], fov: 50 }}>
+          <DebugTools title="Triángulos Estáticos" />
+          
+          <Suspense fallback={null}>
+            <OrbitControls makeDefault autoRotate autoRotateSpeed={0.5} />
+            <Environment preset="forest" background />
+            <Sparkles count={500} size={5} speed={0.5} scale={30} opacity={0.3} color="#ffffff" />
             <InstancedTriangles count={count} />
           </Suspense>
       </Canvas>

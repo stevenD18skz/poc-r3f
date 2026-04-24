@@ -368,9 +368,7 @@ export default function DynamicLightsTest() {
         input={true}
         count={count}
         setCount={setCount}
-        inputConfig={
-          
-          {
+        inputConfig={{
           unit: 'normal',
           type: 'increment',
           min: 1,
@@ -395,20 +393,6 @@ export default function DynamicLightsTest() {
           <LightingScene lightCount={count} lightType={selectedLightType} />
         </Suspense>
       </Canvas>
-
-      {/* Info del test
-      <div className="absolute bottom-32 left-6 bg-black bg-opacity-70 p-4 rounded-lg border border-purple-500 text-white text-xs max-w-xs">
-        <h3 className="font-bold text-purple-400 mb-2">Especificaciones del test</h3>
-        <ul className="space-y-1 text-gray-300">
-          <li>• Geometría: 1 piso + 9 objetos fijos</li>
-          <li>• Draw calls fijos: ~10</li>
-          <li>• Luces fijas: 1 ambient + 1 directional</li>
-          <li>• Luces variables: {count} {LIGHT_LABELS[selectedLightType]}s</li>
-          <li>• Tipo activo: <span className="text-indigo-400 font-bold">{LIGHT_LABELS[selectedLightType]}</span></li>
-          <li>• Todas con shadow casting{selectedLightType === 'HemisphereLight' ? ' (N/A)' : ''}</li>
-          <li>• Shadow map: 256×256 por luz</li>
-        </ul>
-      </div>*/}
     </main>
   )
 }
