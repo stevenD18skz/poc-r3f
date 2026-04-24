@@ -96,9 +96,9 @@ export default function MaterialsStressTest() {
         setCount={setCount} 
         inputConfig={{
           unit: 'normal',
-          type: 'increment',
-          min: 1,
-          max: 128
+          type: 'power',
+          min: 0,
+          max: 12
         }}
       />
 

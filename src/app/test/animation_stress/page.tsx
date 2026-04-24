@@ -74,7 +74,7 @@ function AnimationScene({ count }: { count: number }) {
 }
 
 export default function AnimationStressTest() {
-  const [count, setCount] = useState(2000)
+  const [count, setCount] = useState(64)
 
   return (
     <main className="relative w-full h-screen bg-[#050505] overflow-hidden">

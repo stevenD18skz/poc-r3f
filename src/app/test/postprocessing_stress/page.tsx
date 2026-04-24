@@ -61,7 +61,7 @@ function PostProcessingScene({ count }: { count: number }) {
 }
 
 export default function PostProcessingStressTest() {
-  const [count, setCount] = useState(100)
+  const [count, setCount] = useState(64)
 
   return (
     <main className="relative w-full h-screen bg-[#050505] overflow-hidden">
@@ -72,9 +72,9 @@ export default function PostProcessingStressTest() {
         setCount={setCount} 
         inputConfig={{
           unit: 'normal',
-          type: 'increment',
-          min: 1,
-          max: 500
+          type: 'power',
+          min: 0,
+          max: 12
         }}
       />
 
