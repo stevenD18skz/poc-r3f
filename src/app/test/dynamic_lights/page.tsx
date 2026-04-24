@@ -372,7 +372,7 @@ export default function DynamicLightsTest() {
           unit: 'normal',
           type: 'increment',
           min: 1,
-          max: 15
+          max: 300
         }}
         selectOptions={selectOptions}
         selectedOption={selectedLightType}
