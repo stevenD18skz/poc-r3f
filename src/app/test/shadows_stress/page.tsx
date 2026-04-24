@@ -31,7 +31,7 @@ function InternalSpotLight({
   total: number
   isStatic?: boolean
 }) {
-  const lightRef = useRef<THREE.SpotLight>(null!)
+  const lightRef = useRef<THREE.PointLight>(null!)
   const target = useMemo(() => new THREE.Object3D(), [])
 
   // Cálculo de posición estática: divide el ancho de la arena en 'total' partes
@@ -42,20 +42,13 @@ function InternalSpotLight({
 
   const color = `hsl(195, 30%, 95%)`
 
-  useEffect(() => {
-    if (isStatic && lightRef.current) {
+  useFrame((state) => {
+    if (isStatic) {
       lightRef.current.position.x = staticX
       lightRef.current.position.z = 0
       lightRef.current.position.y = ARENA.h * 0.55
-      
-      // Posición estática del target
-      target.position.set(staticX, 0, 0)
-      target.updateMatrixWorld()
+      return
     }
-  }, [isStatic, staticX, target])
-
-  useFrame((state) => {
-    if (isStatic) return
 
     const t = state.clock.getElapsedTime() * 1
     const baseAngle = (index / total) * Math.PI * 2
@@ -76,24 +69,24 @@ function InternalSpotLight({
 
   return (
     <>
-      <spotLight
+      <pointLight
         ref={lightRef}
         color={color}
         intensity={512}
-        angle={Math.PI / 4}
-        penumbra={0.4}
+        // angle={Math.PI / 2}   // Cono amplio para iluminar más superficies
+        //penumbra={0.4}
         distance={ARENA.w * 4}
         castShadow
         shadow-mapSize={[512, 512]}
         shadow-bias={-0.0005}
-        target={target}
+      //target={target}
       >
         {/* Esfera visual que se mueve con la luz */}
         <mesh>
           <sphereGeometry args={[0.2, 8, 8]} />
           <meshBasicMaterial color={color} />
         </mesh>
-      </spotLight>
+      </pointLight>
       <primitive object={target} />
     </>
   )
@@ -261,7 +254,7 @@ export default function ShadowsStressTest() {
             <input 
               type="range" 
               min="1" 
-              max="15" 
+              max="7" 
               step="1" 
               className="w-full accent-yellow-500 cursor-pointer h-1 bg-white/10 rounded-full appearance-none hover:bg-white/20 transition-colors"
               value={lightCount}
