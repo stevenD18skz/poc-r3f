@@ -75,22 +75,6 @@ function MetricsCollector({ onUpdate, count }: { onUpdate: (m: any) => void; cou
 }
 
 function PerfMetricsHUD({ metrics }: { metrics: any }) {
-  const metricsRef = useRef(metrics)
-
-  useEffect(() => {
-    metricsRef.current = metrics
-  }, [metrics])
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      console.log('📊 Performance Metrics (5s):', {
-        frameTime: `${metricsRef.current.frameTime.toFixed(2)}ms`,
-        jitter: `${metricsRef.current.jitter.toFixed(2)}ms`,
-        loadTime: `${metricsRef.current.loadTime.toFixed(1)}ms`
-      })
-    }, 5000)
-    return () => clearInterval(interval)
-  }, [])
 
   const jitterColor =
     metrics.jitter < 1 ? 'text-emerald-400' :
@@ -179,7 +163,7 @@ export default function TrianglesStaticTest() {
         inputConfig={{
           unit: 'thousands',
           type: 'values',
-          values: [1000, 4000, 16000, 64000, 256000],
+          values: [1000, 4000, 16000, 64000, 256000, 1024000],
         }}
       />
       <PerfMetricsHUD metrics={metrics} />
