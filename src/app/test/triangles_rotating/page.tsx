@@ -75,23 +75,6 @@ function MetricsCollector({ onUpdate, count }: { onUpdate: (m: any) => void; cou
 }
 
 function PerfMetricsHUD({ metrics }: { metrics: any }) {
-  const metricsRef = useRef(metrics)
-
-  useEffect(() => {
-    metricsRef.current = metrics
-  }, [metrics])
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      console.log('📊 Performance Metrics (5s):', {
-        frameTime: `${metricsRef.current.frameTime.toFixed(2)}ms`,
-        jitter: `${metricsRef.current.jitter.toFixed(2)}ms`,
-        loadTime: `${metricsRef.current.loadTime.toFixed(1)}ms`
-      })
-    }, 5000)
-    return () => clearInterval(interval)
-  }, [])
-
   const jitterColor =
     metrics.jitter < 1 ? 'text-emerald-400' :
     metrics.jitter < 3 ? 'text-yellow-400' :
@@ -187,7 +170,7 @@ function InstancedRotatingTriangles({ count = 32000 }) {
 }
 
 export default function TrianglesRotatingTest() {
-  const [count, setCount] = useState(1000)
+  const [count, setCount] = useState(1024000)
   const [metrics, setMetrics] = useState({ jitter: 0, frameTime: 0, loadTime: 0 })
 
   return (
@@ -200,7 +183,7 @@ export default function TrianglesRotatingTest() {
         inputConfig={{
           unit: 'thousands',
           type: 'values',
-          values: [1000, 4000, 16000, 32000],
+          values: [1000, 4000, 16000, 64000, 256000, 1024000],
         }}
       />
       <PerfMetricsHUD metrics={metrics} />

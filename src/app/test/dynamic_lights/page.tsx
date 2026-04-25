@@ -70,7 +70,7 @@ function DynamicLightsHUD({ metrics, count }: { metrics: any, count: number }) {
         const avgJ = stats.current.jSum / n
         
         console.log(
-          `%c[5s Avg - Dynamic Lights] FT: ${avgFT.toFixed(2)}ms | Scripting Time: ~0.5ms | Shader Complexity: ${count} Luces | Pixel Fill Rate: ${avgFT.toFixed(2)}ms`,
+          `%c[5s Avg - Dynamic Lights] FT: ${avgFT.toFixed(2)}ms | Scripting Time: ~0.5ms | Shader Complexity: ${count} Luces | Pixel Fill Rate: ${avgFT.toFixed(2)}ms | Jitter: ${avgJ.toFixed(2)}ms`,
           'color: #facc15; font-weight: bold;'
         )
         
@@ -104,6 +104,13 @@ function DynamicLightsHUD({ metrics, count }: { metrics: any, count: number }) {
           ~{metrics.frameTime.toFixed(2)}<span className="text-xs text-gray-500 ml-1">ms</span>
         </p>
       </div>
+      <div className="bg-black/80 backdrop-blur-xl border border-yellow-500/40 px-4 py-3 rounded-xl">
+        <p className="text-gray-400 text-xs uppercase tracking-widest mb-1">Jitter</p>
+        <p className={`text-2xl font-mono font-black ${jitterColor}`}>
+          {metrics.jitter.toFixed(2)}<span className="text-xs text-gray-500 ml-1">ms</span>
+        </p>
+      </div>
+      
     </div>
   )
 }
@@ -129,10 +136,10 @@ const LIGHT_TYPE_OPTIONS: Record<string, number> = {
 
 // Rangos de benchmark por tipo de luz
 const LIGHT_RANGES: Record<string, number[]> = {
-  PointLight: [1, 2, 4, 8],
-  SpotLight: [1, 4, 8, 14],
-  DirectionalLight: [1, 4, 8, 14],
-  HemisphereLight: [1, 4, 8],
+  PointLight: [1, 2, 4, 7],
+  SpotLight: [1, 2, 4, 7],
+  DirectionalLight: [1, 2, 4, 7],
+  HemisphereLight: [1, 144, 320],
 }
 
 // Labels legibles para la UI
