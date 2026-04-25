@@ -66,16 +66,8 @@ export default function TestDashboard() {
       icon: '🪨'
     },
     {
-      id: 'vram_stress',
-      title: 'Estrés de Memoria',
-      description: 'Prueba de estrés de VRAM mediante el procesamiento de texturas en tiempo real.',
-      path: '/test/vram_stress',
-      icon: '💽'
-    },
-    
-    {
       id: 'materials_stress',
-      title: 'Materiales PBR Complejos',
+      title: 'Materiales PBR Complejos / Vram stress',
       description: 'Evalúa el impacto de materiales físicos avanzados como vidrio, refracción y clearcoat.',
       path: '/test/materials_stress',
       icon: '💎'
@@ -86,6 +78,13 @@ export default function TestDashboard() {
       description: 'Mide la carga de la GPU al aplicar pases de efectos como Bloom, SSAO, Ruido y Viñeta.',
       path: '/test/postprocessing_stress',
       icon: '🎬'
+    },
+    {
+      id: 'faltante',
+      title: 'Faltante',
+      description: 'Faltante',
+      path: '/test/faltante',
+      icon: '❓'
     }
   ];
 
