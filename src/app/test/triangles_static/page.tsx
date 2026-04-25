@@ -1,14 +1,24 @@
 'use client'
 
 import { Canvas, useFrame } from '@react-three/fiber'
-import { useRef, useEffect, useState, Suspense, useCallback } from 'react'
+import { useRef, useEffect, useState, Suspense } from 'react'
 import * as THREE from 'three'
 import PerformanceOverlay from '@/components/test/PerformanceOverlay'
 import DebugTools from '@/components/DebugTools'
-import { OrbitControls, Sparkles, Environment } from '@react-three/drei'
+import { OrbitControls } from '@react-three/drei'
 
-//upsate 25-04-2026-12:48
+// ─────────────────────────────────────────────
+// PARÁMETROS DEL TEST (deben ser idénticos en Babylon)
+// ─────────────────────────────────────────────
+// Geometría: cono radio 0.2, altura 0.4, 8 segmentos (= ~16 triángulos)
+// Instancias: N (1 draw call total)
+// Animación: NINGUNA (GPU puro, sin overhead de CPU)
+// Iluminación: ambientLight intensity=1 únicamente
+// Fondo: color sólido #050505 (sin IBL)
+// Lo que mides: rendimiento GPU de renderizado estático puro
+// ─────────────────────────────────────────────
 
+// ─── MÉTRICAS ────────────────────────────────────────────────────────────────
 const JITTER_SAMPLE_SIZE = 60
 const metricsCalculator = {
   samples: new Float32Array(JITTER_SAMPLE_SIZE),
@@ -37,12 +47,12 @@ const metricsCalculator = {
   },
 }
 
-function MetricsCollector({ onUpdate, count }: { onUpdate: (m: any) => void, count: number }) {
+function MetricsCollector({ onUpdate, count }: { onUpdate: (m: any) => void; count: number }) {
   const frameCount = useRef(0)
   const startTime = useRef(performance.now())
   const loadTime = useRef(0)
   const lastCount = useRef(count)
-  
+
   if (lastCount.current !== count) {
     startTime.current = performance.now()
     lastCount.current = count
@@ -53,11 +63,9 @@ function MetricsCollector({ onUpdate, count }: { onUpdate: (m: any) => void, cou
   useFrame((_, delta) => {
     metricsCalculator.push(delta)
     frameCount.current++
-
     if (frameCount.current === 1) {
       loadTime.current = performance.now() - startTime.current
     }
-
     if (frameCount.current % 10 === 0) {
       onUpdate({ ...metricsCalculator.compute(), loadTime: loadTime.current })
     }
@@ -66,38 +74,11 @@ function MetricsCollector({ onUpdate, count }: { onUpdate: (m: any) => void, cou
   return null
 }
 
-function PerfMetricsHUD({ metrics, title }: { metrics: any, title: string }) {
-  const stats = useRef({ ftSum: 0, jSum: 0, lSum: 0, samples: 0 })
-
-  useEffect(() => {
-    stats.current.ftSum += metrics.frameTime
-    stats.current.jSum += metrics.jitter
-    stats.current.lSum = metrics.loadTime
-    stats.current.samples++
-  }, [metrics])
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      if (stats.current.samples > 0) {
-        const n = stats.current.samples
-        const avgFT = stats.current.ftSum / n
-        const avgJ = stats.current.jSum / n
-        const load = stats.current.lSum
-        
-        console.log(
-          `%c[5s Avg - ${title}] FT: ${avgFT.toFixed(2)}ms | Jitter: ${avgJ.toFixed(2)}ms | LoadTime: ${load.toFixed(1)}ms`,
-          'color: #38bdf8; font-weight: bold;'
-        )
-        
-        stats.current.ftSum = 0
-        stats.current.jSum = 0
-        stats.current.samples = 0
-      }
-    }, 5000)
-    return () => clearInterval(interval)
-  }, [title])
-
-  const jitterColor = metrics.jitter < 1 ? 'text-emerald-400' : metrics.jitter < 3 ? 'text-yellow-400' : 'text-red-400'
+function PerfMetricsHUD({ metrics }: { metrics: any }) {
+  const jitterColor =
+    metrics.jitter < 1 ? 'text-emerald-400' :
+    metrics.jitter < 3 ? 'text-yellow-400' :
+    'text-red-400'
 
   return (
     <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-2 min-w-[170px]">
@@ -123,42 +104,45 @@ function PerfMetricsHUD({ metrics, title }: { metrics: any, title: string }) {
   )
 }
 
-function InstancedTriangles({ count = 10000 }) {
+// ─── GEOMETRÍA ────────────────────────────────────────────────────────────────
+function InstancedTriangles({ count = 32000 }) {
   const meshRef = useRef<THREE.InstancedMesh>(null!)
-  const tempObject = new THREE.Object3D()
+  // ✅ tempObject estable: no se recrea en cada render de React
+  const tempObject = useRef(new THREE.Object3D()).current
 
   useEffect(() => {
+    if (!meshRef.current) return
     for (let i = 0; i < count; i++) {
       const radius = 10 + Math.random() * 15
       const theta = Math.random() * Math.PI * 2
       const phi = Math.random() * Math.PI
-      
+
       tempObject.position.set(
         radius * Math.sin(phi) * Math.cos(theta),
         radius * Math.sin(phi) * Math.sin(theta),
         radius * Math.cos(phi)
       )
-      
-      tempObject.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI)
+      tempObject.rotation.set(
+        Math.random() * Math.PI,
+        Math.random() * Math.PI,
+        Math.random() * Math.PI
+      )
       tempObject.updateMatrix()
       meshRef.current.setMatrixAt(i, tempObject.matrix)
-      
-      // Random colors for aesthetics
       meshRef.current.setColorAt(i, new THREE.Color(`hsl(${Math.random() * 50 + 200}, 80%, 50%)`))
     }
     meshRef.current.instanceMatrix.needsUpdate = true
     if (meshRef.current.instanceColor) meshRef.current.instanceColor.needsUpdate = true
   }, [count])
 
-  // Optional: Gentle vibration/oscillation
-  useFrame((state) => {
-    const t = state.clock.getElapsedTime()
-    meshRef.current.rotation.y = t * 0.05
-  })
+  // ✅ SIN useFrame: test estático, sin animación
+  // Mide GPU puro sin overhead de actualización de matrices
 
   return (
-    <instancedMesh ref={meshRef} args={[null!, null!, count]}>
-      <coneGeometry args={[0.1, 0.2, 3]} />
+    // ✅ undefined en lugar de null! para evitar warnings de TypeScript
+    <instancedMesh ref={meshRef} args={[undefined, undefined, count]}>
+      {/* ✅ radio 0.2, altura 0.4, 8 segmentos = ~16 triángulos por instancia */}
+      <coneGeometry args={[0.2, 0.4, 8]} />
       <meshStandardMaterial />
     </instancedMesh>
   )
@@ -170,24 +154,36 @@ export default function TrianglesStaticTest() {
 
   return (
     <main className="relative w-full h-screen bg-[#050505] overflow-hidden">
-      <PerformanceOverlay 
-        title={`${count} Triángulos Estáticos`} 
-        input={true} 
-        count={count} 
-        setCount={setCount} 
+      <PerformanceOverlay
+        title={`${count} Triángulos Estáticos`}
+        input={true}
+        count={count}
+        setCount={setCount}
       />
-      <PerfMetricsHUD metrics={metrics} title="Triángulos Estáticos" />
+      <PerfMetricsHUD metrics={metrics} />
 
       <Canvas camera={{ position: [20, 20, 20], fov: 50 }}>
-          <DebugTools title="Triángulos Estáticos" />
-          <MetricsCollector onUpdate={setMetrics} count={count} />
-          
-          <Suspense fallback={null}>
-            <ambientLight intensity={1} />
-            <OrbitControls makeDefault autoRotate autoRotateSpeed={0.5} />
-            <InstancedTriangles count={count} />
-          </Suspense>
+        <DebugTools title="Triángulos Estáticos" />
+        <MetricsCollector onUpdate={setMetrics} count={count} />
+
+        <Suspense fallback={null}>
+          <ambientLight intensity={1} />
+          <OrbitControls makeDefault />
+          <InstancedTriangles count={count} />
+        </Suspense>
       </Canvas>
+
+      <div className="absolute bottom-6 left-6 bg-black/70 p-4 rounded-lg border border-cyan-500 text-white text-xs max-w-xs">
+        <h3 className="font-bold text-cyan-400 mb-2">Especificaciones del test</h3>
+        <ul className="space-y-1 text-gray-300">
+          <li>• Instancias: {count.toLocaleString()}</li>
+          <li>• Geometría: cono r=0.2, h=0.4, 8 seg (~16 tris)</li>
+          <li>• Triángulos totales: ~{(count * 16).toLocaleString()}</li>
+          <li>• Draw calls: 1 (InstancedMesh)</li>
+          <li>• Animación: ninguna (GPU puro)</li>
+          <li>• Iluminación: ambientLight × 1</li>
+        </ul>
+      </div>
     </main>
   )
 }
