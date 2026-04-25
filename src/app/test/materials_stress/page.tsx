@@ -183,7 +183,7 @@ function MaterialsHUD({ metrics, count }: { metrics: MaterialMetrics; count: num
 }
 
 export default function MaterialsStressTest() {
-  const [count, setCount] = useState(32)
+  const [count, setCount] = useState(8)
   const [metrics, setMetrics] = useState<MaterialMetrics>({
     jitter: 0, frameBudget: 0, frameTime: 0,
     shaderBreakdown: { 'Transmission': 0, 'Metal PBR': 0, 'Clearcoat+Sheen': 0 },
@@ -204,7 +204,7 @@ export default function MaterialsStressTest() {
         input={true}
         count={count}
         setCount={setCount}
-        inputConfig={{ unit: 'normal', type: 'power', min: 0, max: 12 }}
+        inputConfig={{ unit: 'normal', type: 'values', values: [8, 32, 128] }}
       />
 
       <MaterialsHUD metrics={metrics} count={count} />

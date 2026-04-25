@@ -22,10 +22,12 @@ export default function PerformanceOverlay({
   setCount?: (count: number) => void,
   unit?: 'thousands' | 'normal',
   inputConfig?: {
-    unit: 'thousands' | 'normal',
-    type: 'increment' | 'power',
-    min: number,
-    max: number,
+    unit?: 'thousands' | 'normal',
+    type?: 'increment' | 'power' | 'values',
+    min?: number,
+    max?: number,
+    step?: number,
+    values?: number[],
   },
   selectOptions?: Record<string, number>,
   selectedOption?: string,
@@ -37,9 +39,10 @@ export default function PerformanceOverlay({
   const unitLabel = isThousands ? 'TRIS' : 'OBJ';
 
   // Configuración del slider
-  const type = inputConfig?.type || 'power';
-  const min = inputConfig?.min ?? 0;
-  const max = inputConfig?.max ?? (isThousands ? 12 : 10);
+  const type = inputConfig?.type || (inputConfig?.values ? 'values' : 'power');
+  const min = type === 'values' ? 0 : (inputConfig?.min ?? 0);
+  const max = type === 'values' ? (inputConfig!.values!.length - 1) : (inputConfig?.max ?? (isThousands ? 12 : 10));
+  const step = inputConfig?.step || 1;
 
   const getLabel = (val: number) => {
     if (val >= 1000000) return `${(val / 1000000).toFixed(0)}M`;
@@ -47,8 +50,8 @@ export default function PerformanceOverlay({
     return val.toString();
   };
 
-  const minVal = type === 'power' ? multiplier * Math.pow(2, min) : min;
-  const maxVal = type === 'power' ? multiplier * Math.pow(2, max) : max;
+  const minVal = type === 'values' ? inputConfig!.values![0] : (type === 'power' ? multiplier * Math.pow(2, min) : min);
+  const maxVal = type === 'values' ? inputConfig!.values![inputConfig!.values!.length - 1] : (type === 'power' ? multiplier * Math.pow(2, max) : max);
 
   return (
     <div className="fixed top-0 left-0 w-full h-full pointer-events-none z-100 p-6">
@@ -94,12 +97,21 @@ export default function PerformanceOverlay({
                 type="range" 
                 min={min} 
                 max={max} 
-                step="1" 
+                step={step} 
                 className="w-full accent-blue-500 cursor-pointer h-1 bg-white/10 rounded-full appearance-none hover:bg-white/20 transition-colors"
-                value={type === 'power' ? Math.log2(count / multiplier) : count}
+                value={
+                  type === 'values' ? Math.max(0, inputConfig!.values!.indexOf(count)) :
+                  type === 'power' ? Math.log2(count / multiplier) : count
+                }
                 onChange={(e) => {
                   const val = Number(e.target.value);
-                  setCount(type === 'power' ? multiplier * Math.pow(2, val) : val);
+                  if (type === 'values') {
+                    setCount(inputConfig!.values![val]);
+                  } else if (type === 'power') {
+                    setCount(multiplier * Math.pow(2, val));
+                  } else {
+                    setCount(val);
+                  }
                 }}
               />
             </div>

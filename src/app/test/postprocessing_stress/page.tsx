@@ -151,7 +151,7 @@ function PostMetricsHUD({ metrics }: { metrics: PostMetrics }) {
 }
 
 export default function PostProcessingStressTest() {
-  const [count, setCount] = useState(64)
+  const [count, setCount] = useState(32)
   const [metrics, setMetrics] = useState<PostMetrics>({ jitter: 0, frameBudget: 0, frameTime: 0, peakFrame: 0 })
   const handleMetrics = useCallback((m: PostMetrics) => setMetrics(m), [])
 
@@ -162,7 +162,7 @@ export default function PostProcessingStressTest() {
         input={true}
         count={count}
         setCount={setCount}
-        inputConfig={{ unit: 'normal', type: 'power', min: 0, max: 12 }}
+        inputConfig={{ unit: 'normal', type: 'values', values: [32, 128, 512] }}
       />
 
       <PostMetricsHUD metrics={metrics} />

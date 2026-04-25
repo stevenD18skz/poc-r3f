@@ -302,7 +302,7 @@ function PhysicsMetricsHUD({ metrics, count }: { metrics: PhysicsMetrics; count:
 }
 
 export default function PhysicsStressTest() {
-  const [count, setCount] = useState(64)
+  const [count, setCount] = useState(32)
   const [metrics, setMetrics] = useState<PhysicsMetrics>({
     simStepMs: 0, activeBodies: 0, jitter: 0, frameBudget: 0,
   })
@@ -314,7 +314,7 @@ export default function PhysicsStressTest() {
         input={true}
         count={count}
         setCount={setCount}
-        inputConfig={{ unit: 'normal', type: 'power', min: 0, max: 10 }}
+        inputConfig={{ unit: 'normal', type: 'values', values: [32, 64, 128, 256] }}
       />
 
       <PhysicsMetricsHUD metrics={metrics} count={count} />

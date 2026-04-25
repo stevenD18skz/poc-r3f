@@ -266,7 +266,7 @@ function Crosshair() {
 // PÁGINA PRINCIPAL
 // ─────────────────────────────────────────────
 export default function RaycastTest() {
-  const [count, setCount] = useState(64)
+  const [count, setCount] = useState(50)
   const [score, setScore] = useState(0)
   const [missed, setMissed] = useState(0)
   const [intersectionTime, setIntersectionTime] = useState(0)
@@ -277,7 +277,7 @@ export default function RaycastTest() {
   const meshRegistry = useRef<Map<number, THREE.Mesh>>(new Map())
 
   const [targets, setTargets] = useState<TargetData[]>(() =>
-    Array.from({ length: 64 }, () => createTarget(nextId.current++))
+    Array.from({ length: 50 }, () => createTarget(nextId.current++))
   )
 
   useEffect(() => {
@@ -315,7 +315,7 @@ export default function RaycastTest() {
         input={true}
         count={count}
         setCount={setCount}
-        inputConfig={{ unit: 'normal', type: 'power', min: 0, max: 12 }}
+        inputConfig={{ unit: 'normal', type: 'values', values: [50, 200, 500, 1000] }}
       />
 
       <GameHUD

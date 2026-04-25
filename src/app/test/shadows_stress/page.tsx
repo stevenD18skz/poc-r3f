@@ -325,7 +325,7 @@ function ShadowScene({
 
 export default function ShadowsStressTest() {
   const [count, setCount] = useState(64)
-  const [lightCount, setLightCount] = useState(3)
+  const [lightCount, setLightCount] = useState(1)
   const [isStatic, setIsStatic] = useState(false)
   const [metrics, setMetrics] = useState({ jitter: 0, frameTime: 0 })
 
@@ -349,9 +349,8 @@ export default function ShadowsStressTest() {
         setCount={setCount}
         inputConfig={{
           unit: 'normal',
-          type: 'power',
-          min: 0,
-          max: 19,
+          type: 'values',
+          values: [64, 256, 1000, 4000],
         }}
       >
         <div className="bg-white/5 px-6 py-3 border-t border-white/10 flex flex-col gap-4 rounded-3xl mt-4">
@@ -366,7 +365,7 @@ export default function ShadowsStressTest() {
             <input 
               type="range" 
               min="1" 
-              max="7" 
+              max="2" 
               step="1" 
               className="w-full accent-yellow-500 cursor-pointer h-1 bg-white/10 rounded-full appearance-none hover:bg-white/20 transition-colors"
               value={lightCount}

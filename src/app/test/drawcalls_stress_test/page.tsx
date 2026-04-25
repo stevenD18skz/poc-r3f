@@ -218,7 +218,7 @@ function DrawCallsHUD({ metrics, count }: { metrics: DrawCallMetrics; count: num
 }
 
 export default function DrawCallsStressTest() {
-  const [count, setCount] = useState(128)
+  const [count, setCount] = useState(64)
   const [metrics, setMetrics] = useState<DrawCallMetrics>({
     frameTime: 0, jitter: 0, frameBudget: 0, drawCalls: 0,
   })
@@ -231,7 +231,7 @@ export default function DrawCallsStressTest() {
         input={true}
         count={count}
         setCount={setCount}
-        inputConfig={{ unit: 'normal', type: 'power', min: 0, max: 12 }}
+        inputConfig={{ unit: 'normal', type: 'values', values: [64, 256, 512, 1000, 2000] }}
       />
 
       <DrawCallsHUD metrics={metrics} count={count} />

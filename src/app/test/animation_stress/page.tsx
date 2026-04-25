@@ -277,7 +277,7 @@ export default function AnimationStressTest() {
         input={true}
         count={count}
         setCount={setCount}
-        inputConfig={{ unit: 'normal', type: 'power', min: 0, max: 14 }}
+        inputConfig={{ unit: 'normal', type: 'values', values: [64, 256, 1000, 4000, 16000] }}
       />
 
       <AnimMetricsHUD metrics={metrics} count={count} />

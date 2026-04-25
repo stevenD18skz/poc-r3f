@@ -170,7 +170,7 @@ function InstancedRotatingTriangles({ count = 32000 }) {
 }
 
 export default function TrianglesRotatingTest() {
-  const [count, setCount] = useState(32000)
+  const [count, setCount] = useState(1000)
   const [metrics, setMetrics] = useState({ jitter: 0, frameTime: 0, loadTime: 0 })
 
   return (
@@ -182,9 +182,8 @@ export default function TrianglesRotatingTest() {
         setCount={setCount}
         inputConfig={{
           unit: 'thousands',
-          type: 'power',
-          min: 0,
-          max: 12,
+          type: 'values',
+          values: [1000, 4000, 16000, 32000],
         }}
       />
       <PerfMetricsHUD metrics={metrics} />

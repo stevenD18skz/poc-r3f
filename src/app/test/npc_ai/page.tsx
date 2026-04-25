@@ -305,7 +305,7 @@ export default function NpcAiTest() {
         input={true}
         count={npcCount}
         setCount={setNpcCount}
-        inputConfig={{ unit: 'normal', type: 'power', min: 1, max: 12 }}
+        inputConfig={{ unit: 'normal', type: 'values', values: [4, 8, 16, 32] }}
       />
       <NetworkMetricsHUD metrics={metrics} npcCount={npcCount} scriptingMs={scriptingMs} />
       <Canvas camera={{ position: [0, 14, 18], fov: 50 }}>

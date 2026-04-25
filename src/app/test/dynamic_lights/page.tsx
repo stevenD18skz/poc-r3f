@@ -127,6 +127,14 @@ const LIGHT_TYPE_OPTIONS: Record<string, number> = {
   HemisphereLight: 0,
 }
 
+// Rangos de benchmark por tipo de luz
+const LIGHT_RANGES: Record<string, number[]> = {
+  PointLight: [1, 2, 4, 8],
+  SpotLight: [1, 4, 8, 14],
+  DirectionalLight: [1, 4, 8, 14],
+  HemisphereLight: [1, 4, 8],
+}
+
 // Labels legibles para la UI
 const LIGHT_LABELS: Record<string, string> = {
   PointLight: 'Point Light',
@@ -451,7 +459,7 @@ function LightingScene({ lightCount, lightType }: { lightCount: number; lightTyp
 }
 
 export default function DynamicLightsTest() {
-  const [count, setCount] = useState(13)
+  const [count, setCount] = useState(1)
   const [selectedLightType, setSelectedLightType] = useState<string>('PointLight')
   const [metrics, setMetrics] = useState({ jitter: 0, frameTime: 0 })
 
@@ -463,6 +471,15 @@ export default function DynamicLightsTest() {
     ])
   )
 
+  // Cuando cambia el tipo de luz, ajustar el count al primer valor válido del nuevo rango
+  const handleLightTypeChange = (key: string) => {
+    setSelectedLightType(key)
+    const newRange = LIGHT_RANGES[key]
+    if (!newRange.includes(count)) {
+      setCount(newRange[0])
+    }
+  }
+
   return (
     <main className="relative w-full h-screen bg-[#050505] overflow-hidden">
       <PerformanceOverlay
@@ -472,13 +489,12 @@ export default function DynamicLightsTest() {
         setCount={setCount}
         inputConfig={{
           unit: 'normal',
-          type: 'increment',
-          min: 1,
-          max: 15
+          type: 'values',
+          values: LIGHT_RANGES[selectedLightType],
         }}
         selectOptions={selectOptions}
         selectedOption={selectedLightType}
-        onSelectChange={(key) => setSelectedLightType(key)}
+        onSelectChange={handleLightTypeChange}
       />
       <DynamicLightsHUD metrics={metrics} count={count} />
 
