@@ -1,5 +1,0 @@
-4 entidades
-
-Escena,FPS Promedio,GPU (ms),CPU (ms),Draw Calls,Triangulos,Geometrias,Texturas,Shaders,Lineas,Puntos,Memoria RAM (MB),VRAM Estimada (MB)
-Metricas Actuales,98.32,0.00,0.78,4,320,1,1,1,0,0,109.20,0.01
-FT: 9.97ms | Jitter: 2.52ms | Budget: 59.8% | Loops: 5

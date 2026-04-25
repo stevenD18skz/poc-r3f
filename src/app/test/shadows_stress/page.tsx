@@ -6,7 +6,116 @@ import * as THREE from 'three'
 import PerformanceOverlay from '@/components/test/PerformanceOverlay'
 import DebugTools from '@/components/DebugTools'
 import Loader3D from '@/components/ui/Loader3D'
-import { OrbitControls, } from '@react-three/drei'
+import { OrbitControls } from '@react-three/drei'
+
+const JITTER_SAMPLE_SIZE = 60
+const metricsCalculator = {
+  samples: new Float32Array(JITTER_SAMPLE_SIZE),
+  index: 0,
+  filled: 0,
+  push(delta: number) {
+    const ms = delta * 1000
+    this.samples[this.index] = ms
+    this.index = (this.index + 1) % JITTER_SAMPLE_SIZE
+    this.filled = Math.min(this.filled + 1, JITTER_SAMPLE_SIZE)
+  },
+  compute() {
+    if (this.filled < 2) return { jitter: 0, frameTime: 0 }
+    let sum = 0
+    for (let i = 0; i < this.filled; i++) sum += this.samples[i]
+    const mean = sum / this.filled
+    let variance = 0
+    for (let i = 0; i < this.filled; i++) {
+      const diff = this.samples[i] - mean
+      variance += diff * diff
+    }
+    return {
+      jitter: Math.round(Math.sqrt(variance / this.filled) * 100) / 100,
+      frameTime: Math.round(mean * 100) / 100,
+    }
+  },
+}
+
+function MetricsCollector({ onUpdate }: { onUpdate: (m: any) => void }) {
+  const frameCount = useRef(0)
+
+  useFrame((_, delta) => {
+    metricsCalculator.push(delta)
+    frameCount.current++
+
+    if (frameCount.current % 10 === 0) {
+      onUpdate(metricsCalculator.compute())
+    }
+  })
+
+  return null
+}
+
+function ShadowStressHUD({ metrics, lightCount }: { metrics: any, lightCount: number }) {
+  const stats = useRef({ ftSum: 0, jSum: 0, samples: 0 })
+
+  useEffect(() => {
+    stats.current.ftSum += metrics.frameTime
+    stats.current.jSum += metrics.jitter
+    stats.current.samples++
+  }, [metrics])
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (stats.current.samples > 0) {
+        const n = stats.current.samples
+        const avgFT = stats.current.ftSum / n
+        const avgJ = stats.current.jSum / n
+        const passes = 1 + lightCount
+        const vram = (lightCount * 512 * 512 * 4 / 1048576).toFixed(1)
+        
+        console.log(
+          `%c[5s Avg - Shadow Stress] FT: ${avgFT.toFixed(2)}ms | Jitter: ${avgJ.toFixed(2)}ms | Passes: ${passes} | DC Mult: x${passes} | VRAM: ${vram}MB`,
+          'color: #a855f7; font-weight: bold;'
+        )
+        
+        stats.current.ftSum = 0
+        stats.current.jSum = 0
+        stats.current.samples = 0
+      }
+    }, 5000)
+    return () => clearInterval(interval)
+  }, [lightCount])
+
+  const jitterColor = metrics.jitter < 1 ? 'text-emerald-400' : metrics.jitter < 3 ? 'text-yellow-400' : 'text-red-400'
+  const renderPasses = 1 + lightCount
+  const vramMB = (lightCount * 512 * 512 * 4 / 1048576).toFixed(1)
+
+  return (
+    <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-2 min-w-[190px]">
+      <div className="bg-black/80 backdrop-blur-xl border border-slate-500/40 px-4 py-3 rounded-xl">
+        <p className="text-gray-400 text-xs uppercase tracking-widest mb-1">Frame Time</p>
+        <p className="text-2xl font-mono font-black text-slate-300">
+          {metrics.frameTime.toFixed(2)}<span className="text-xs text-gray-500 ml-1">ms</span>
+        </p>
+      </div>
+      <div className="bg-black/80 backdrop-blur-xl border border-orange-500/40 px-4 py-3 rounded-xl">
+        <p className="text-gray-400 text-xs uppercase tracking-widest mb-1">Shadow Update Jitter</p>
+        <p className={`text-2xl font-mono font-black ${jitterColor}`}>
+          {metrics.jitter.toFixed(2)}<span className="text-xs text-gray-500 ml-1">ms</span>
+        </p>
+      </div>
+      <div className="bg-black/80 backdrop-blur-xl border border-purple-500/40 px-4 py-3 rounded-xl">
+        <p className="text-gray-400 text-xs uppercase tracking-widest mb-1">Render Passes / DC Mult</p>
+        <p className="text-2xl font-mono font-black text-purple-400">
+          {renderPasses}<span className="text-xs text-gray-500 ml-1">x</span>
+        </p>
+      </div>
+      <div className="bg-black/80 backdrop-blur-xl border border-blue-500/40 px-4 py-3 rounded-xl">
+        <p className="text-gray-400 text-xs uppercase tracking-widest mb-1">Shadow Map VRAM</p>
+        <p className="text-2xl font-mono font-black text-blue-400">
+          {vramMB}<span className="text-xs text-gray-500 ml-1">MB</span>
+        </p>
+      </div>
+    </div>
+  )
+}
+
 
 // ─────────────────────────────────────────────
 // PARÁMETROS DEL TEST (deben ser idénticos en Babylon)
@@ -216,12 +325,15 @@ function ShadowScene({
 
 export default function ShadowsStressTest() {
   const [count, setCount] = useState(64)
-  const [lightCount, setLightCount] = useState(1)
+  const [lightCount, setLightCount] = useState(3)
   const [isStatic, setIsStatic] = useState(false)
+  const [metrics, setMetrics] = useState({ jitter: 0, frameTime: 0 })
 
   return (
     <main className="relative w-full h-screen bg-[#050505] overflow-hidden">
-      <Canvas camera={{ position: [0, ARENA.h * 1.5, 0.1], fov: 75 }} shadows>
+      <ShadowStressHUD metrics={metrics} lightCount={lightCount} />
+      <Canvas shadows camera={{ position: [0, 20, 25], fov: 60 }} dpr={[1, 2]}>
+        <MetricsCollector onUpdate={setMetrics} />
         <DebugTools title="Estrés de Sombras (Arena)" entityCount={count} />
 
         <Suspense fallback={<Loader3D />}>

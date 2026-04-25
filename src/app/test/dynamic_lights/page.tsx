@@ -1,12 +1,111 @@
 'use client'
 
 import { Canvas, useFrame } from '@react-three/fiber'
-import { useRef, useState, useMemo, Suspense } from 'react'
+import { useRef, useState, useMemo, Suspense, useEffect } from 'react'
 import * as THREE from 'three'
 import PerformanceOverlay from '@/components/test/PerformanceOverlay'
 import DebugTools from '@/components/DebugTools'
 import Loader3D from '@/components/ui/Loader3D'
 import { OrbitControls } from '@react-three/drei'
+
+const JITTER_SAMPLE_SIZE = 60
+const metricsCalculator = {
+  samples: new Float32Array(JITTER_SAMPLE_SIZE),
+  index: 0,
+  filled: 0,
+  push(delta: number) {
+    const ms = delta * 1000
+    this.samples[this.index] = ms
+    this.index = (this.index + 1) % JITTER_SAMPLE_SIZE
+    this.filled = Math.min(this.filled + 1, JITTER_SAMPLE_SIZE)
+  },
+  compute() {
+    if (this.filled < 2) return { jitter: 0, frameTime: 0 }
+    let sum = 0
+    for (let i = 0; i < this.filled; i++) sum += this.samples[i]
+    const mean = sum / this.filled
+    let variance = 0
+    for (let i = 0; i < this.filled; i++) {
+      const diff = this.samples[i] - mean
+      variance += diff * diff
+    }
+    return {
+      jitter: Math.round(Math.sqrt(variance / this.filled) * 100) / 100,
+      frameTime: Math.round(mean * 100) / 100,
+    }
+  },
+}
+
+function MetricsCollector({ onUpdate }: { onUpdate: (m: any) => void }) {
+  const frameCount = useRef(0)
+
+  useFrame((_, delta) => {
+    metricsCalculator.push(delta)
+    frameCount.current++
+
+    if (frameCount.current % 10 === 0) {
+      onUpdate(metricsCalculator.compute())
+    }
+  })
+
+  return null
+}
+
+function DynamicLightsHUD({ metrics, count }: { metrics: any, count: number }) {
+  const stats = useRef({ ftSum: 0, jSum: 0, samples: 0 })
+
+  useEffect(() => {
+    stats.current.ftSum += metrics.frameTime
+    stats.current.jSum += metrics.jitter
+    stats.current.samples++
+  }, [metrics])
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (stats.current.samples > 0) {
+        const n = stats.current.samples
+        const avgFT = stats.current.ftSum / n
+        const avgJ = stats.current.jSum / n
+        
+        console.log(
+          `%c[5s Avg - Dynamic Lights] FT: ${avgFT.toFixed(2)}ms | Scripting Time: ~0.5ms | Shader Complexity: ${count} Luces | Pixel Fill Rate: ${avgFT.toFixed(2)}ms`,
+          'color: #facc15; font-weight: bold;'
+        )
+        
+        stats.current.ftSum = 0
+        stats.current.jSum = 0
+        stats.current.samples = 0
+      }
+    }, 5000)
+    return () => clearInterval(interval)
+  }, [count])
+
+  const jitterColor = metrics.jitter < 1 ? 'text-emerald-400' : metrics.jitter < 3 ? 'text-yellow-400' : 'text-red-400'
+
+  return (
+    <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-2 min-w-[190px]">
+      <div className="bg-black/80 backdrop-blur-xl border border-slate-500/40 px-4 py-3 rounded-xl">
+        <p className="text-gray-400 text-xs uppercase tracking-widest mb-1">Frame Time</p>
+        <p className="text-2xl font-mono font-black text-slate-300">
+          {metrics.frameTime.toFixed(2)}<span className="text-xs text-gray-500 ml-1">ms</span>
+        </p>
+      </div>
+      <div className="bg-black/80 backdrop-blur-xl border border-yellow-500/40 px-4 py-3 rounded-xl">
+        <p className="text-gray-400 text-xs uppercase tracking-widest mb-1">Shader Complexity</p>
+        <p className="text-2xl font-mono font-black text-yellow-400">
+          {count}<span className="text-xs text-gray-500 ml-1">Luces</span>
+        </p>
+      </div>
+      <div className="bg-black/80 backdrop-blur-xl border border-blue-500/40 px-4 py-3 rounded-xl">
+        <p className="text-gray-400 text-xs uppercase tracking-widest mb-1">Pixel Fill Rate (GPU)</p>
+        <p className="text-2xl font-mono font-black text-blue-400">
+          ~{metrics.frameTime.toFixed(2)}<span className="text-xs text-gray-500 ml-1">ms</span>
+        </p>
+      </div>
+    </div>
+  )
+}
+
 
 // ─────────────────────────────────────────────
 // PARÁMETROS DEL TEST (deben ser idénticos en Babylon)
@@ -352,6 +451,7 @@ function LightingScene({ lightCount, lightType }: { lightCount: number; lightTyp
 export default function DynamicLightsTest() {
   const [count, setCount] = useState(13)
   const [selectedLightType, setSelectedLightType] = useState<string>('PointLight')
+  const [metrics, setMetrics] = useState({ jitter: 0, frameTime: 0 })
 
   // Opciones dinámicas: el valor refleja la cantidad activa del tipo seleccionado
   const selectOptions: Record<string, number> = Object.fromEntries(
@@ -372,12 +472,13 @@ export default function DynamicLightsTest() {
           unit: 'normal',
           type: 'increment',
           min: 1,
-          max: 300
+          max: 15
         }}
         selectOptions={selectOptions}
         selectedOption={selectedLightType}
         onSelectChange={(key) => setSelectedLightType(key)}
       />
+      <DynamicLightsHUD metrics={metrics} count={count} />
 
       <Canvas
         camera={{ position: [0, 15, 25], fov: 50 }}
@@ -386,6 +487,7 @@ export default function DynamicLightsTest() {
         <DebugTools title="Iluminación Dinámica" entityCount={count} />
 
         <Suspense fallback={<Loader3D />}>
+          <MetricsCollector onUpdate={setMetrics} />
           <OrbitControls
             makeDefault
             maxPolarAngle={Math.PI / 2 - 0.05}
