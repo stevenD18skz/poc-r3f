@@ -7,6 +7,8 @@ import PerformanceOverlay from '@/components/test/PerformanceOverlay'
 import DebugTools from '@/components/DebugTools'
 import { OrbitControls, Sparkles, Environment } from '@react-three/drei'
 
+//upsate 25-04-2026-12:48
+
 const JITTER_SAMPLE_SIZE = 60
 const metricsCalculator = {
   samples: new Float32Array(JITTER_SAMPLE_SIZE),

@@ -9,6 +9,8 @@ import { OrbitControls } from '@react-three/drei'
 
 import Loader3D from '@/components/ui/Loader3D'
 
+//upsate 25-04-2026-12:48
+
 const JITTER_SAMPLE_SIZE = 60
 const metricsCalculator = {
   samples: new Float32Array(JITTER_SAMPLE_SIZE),
