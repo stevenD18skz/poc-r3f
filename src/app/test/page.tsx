@@ -80,11 +80,11 @@ export default function TestDashboard() {
       icon: '🎬'
     },
     {
-      id: 'faltante',
-      title: 'Faltante',
-      description: 'Faltante',
-      path: '/test/faltante',
-      icon: '❓'
+      id: 'drawcalls_stress_test',
+      title: 'Drawcalls Stress Test',
+      description: 'Mide la eficiencia de renderizado de la librería cuando se presentan miles de objetos individuales, cada uno con su propia matriz de transformación.',
+      path: '/test/drawcalls_stress_test',
+      icon: '🏛️'
     }
   ];
 

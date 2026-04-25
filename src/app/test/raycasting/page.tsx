@@ -201,6 +201,25 @@ function GameHUD({
     intersectionTime < 0.5 ? 'text-yellow-400' :
     'text-red-400'
 
+  const stats = useRef({ sum: 0, count: 0 })
+
+  useEffect(() => {
+    stats.current.sum += intersectionTime
+    stats.current.count++
+  }, [intersectionTime])
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (stats.current.count > 0) {
+        const avg = stats.current.sum / stats.current.count
+        console.log(`%c[Average 5s] Intersection: ${avg.toFixed(4)}ms`, 'color: #fb7185; font-weight: bold;')
+        stats.current.sum = 0
+        stats.current.count = 0
+      }
+    }, 5000)
+    return () => clearInterval(interval)
+  }, [])
+
   return (
     <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-3 min-w-[160px]">
       <div className="bg-black/80 backdrop-blur-xl border border-emerald-500/40 px-5 py-3 rounded-xl">
