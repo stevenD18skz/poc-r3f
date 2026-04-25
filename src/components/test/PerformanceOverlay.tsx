@@ -51,7 +51,7 @@ export default function PerformanceOverlay({
   const maxVal = type === 'power' ? multiplier * Math.pow(2, max) : max;
 
   return (
-    <div className="fixed top-0 left-0 w-full h-full pointer-events-none z-[100] p-6">
+    <div className="fixed top-0 left-0 w-full h-full pointer-events-none z-100 p-6">
       {/* Contenedor del Panel (alineado a la izquierda) */}
       <div className="flex justify-start items-start w-full h-full pointer-events-none">
         {/* Panel Único Consolidado en la Izquierda */}
