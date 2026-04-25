@@ -173,6 +173,7 @@ export default function TrianglesStaticTest() {
         </Suspense>
       </Canvas>
 
+      {/*
       <div className="absolute bottom-6 left-6 bg-black/70 p-4 rounded-lg border border-cyan-500 text-white text-xs max-w-xs">
         <h3 className="font-bold text-cyan-400 mb-2">Especificaciones del test</h3>
         <ul className="space-y-1 text-gray-300">
@@ -184,6 +185,7 @@ export default function TrianglesStaticTest() {
           <li>• Iluminación: ambientLight × 1</li>
         </ul>
       </div>
+      */}
     </main>
   )
 }

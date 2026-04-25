@@ -1,0 +1,121 @@
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{background:var(--color-background-secondary);color:var(--color-text-secondary);font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:.06em;padding:8px 12px;text-align:left;border-bottom:0.5px solid var(--color-border-tertiary)}
+td{padding:8px 12px;border-bottom:0.5px solid var(--color-border-tertiary);vertical-align:top;color:var(--color-text-primary)}
+tr:last-child td{border-bottom:none}
+.test{font-weight:500;font-size:13px}
+.id{color:var(--color-text-secondary);font-size:11px;font-family:var(--font-mono)}
+.pts{font-family:var(--font-mono);font-size:12px;color:var(--color-text-primary)}
+.note{font-size:11px;color:var(--color-text-secondary);margin-top:3px}
+.tag{display:inline-block;font-size:10px;font-family:var(--font-mono);padding:2px 7px;border-radius:4px;font-weight:500}
+.tag-fixed{background:#EAF3DE;color:#3B6D11}
+.tag-var{background:#E6F1FB;color:#185FA5}
+.tag-irrelevant{background:#F1EFE8;color:#5F5E5A}
+</style>
+
+<div style="padding:1rem 0">
+<table>
+<thead>
+<tr>
+  <th style="width:26%">Test</th>
+  <th style="width:22%">Puntos de medición</th>
+  <th style="width:14%">Variable</th>
+  <th style="width:38%">Justificación</th>
+</tr>
+</thead>
+<tbody>
+
+<tr>
+  <td><div class="test">01 — Escena idle</div><div class="id">scene_idle</div></td>
+  <td><div class="pts">1 sola medición (60 s)</div><div class="note">no tiene count</div></td>
+  <td><span class="tag tag-fixed">fijo</span></td>
+  <td><div class="note">Baseline de referencia. Un único run estabilizado define el piso de consumo. Repetir no aporta variación.</div></td>
+</tr>
+
+<tr>
+  <td><div class="test">02 — Triángulos estáticos</div><div class="id">triangles_static</div></td>
+  <td><div class="pts">1K · 4K · 16K · 64K · 256K</div><div class="note">5 puntos, potencias de 4×</div></td>
+  <td><span class="tag tag-var">count</span></td>
+  <td><div class="note">Saltar de 4 en 4 potencias da suficiente resolución para ver cuándo el fillrate de la iGPU satura. No hace falta cada 2×.</div></td>
+</tr>
+
+<tr>
+  <td><div class="test">03 — Triángulos rotando</div><div class="id">triangles_rotating</div></td>
+  <td><div class="pts">1K · 4K · 16K · 32K</div><div class="note">4 puntos — tope real ~37K</div></td>
+  <td><span class="tag tag-var">count</span></td>
+  <td><div class="note">Con más de ~37K el single-thread JS domina (>16 ms/frame). Medir por encima solo confirma que ya está roto; no añade información útil.</div></td>
+</tr>
+
+<tr>
+  <td><div class="test">04 — Luces dinámicas</div><div class="id">dynamic_lights</div></td>
+  <td><div class="pts">1 · 2 · 4 · 8 (PointLight)<br/>1 · 4 · 8 · 14 (Spot/Dir)<br/>1 · 4 · 8 (Hemi)</div><div class="note">por tipo de luz</div></td>
+  <td><span class="tag tag-var">count + tipo</span></td>
+  <td><div class="note">El límite duro de PointLight es 8 (16 tex-units). Spot/Dir aguantan más. Medir cada tipo por separado; no mezclar.</div></td>
+</tr>
+
+<tr>
+  <td><div class="test">05 — Estrés de sombras</div><div class="id">shadows_stress</div></td>
+  <td><div class="pts">64 · 256 · 1K · 4K objetos<br/>× 1 y 2 PointLights</div><div class="note">2 variables cruzadas</div></td>
+  <td><span class="tag tag-var">count + luces</span></td>
+  <td><div class="note">El costo escala por objetos (fill del shadow map) y por número de luces. Cruzar ambas con 4 puntos de count es suficiente.</div></td>
+</tr>
+
+<tr>
+  <td><div class="test">06 — Raycasting</div><div class="id">raycasting</div></td>
+  <td><div class="pts">50 · 200 · 500 · 1000</div><div class="note">4 puntos lineales</div></td>
+  <td><span class="tag tag-var">count</span></td>
+  <td><div class="note">El Intersection Time crece linealmente con N (O(n) brute force). 4 puntos permiten trazar la pendiente. Por encima de 1000 la escena ya no es jugable.</div></td>
+</tr>
+
+<tr>
+  <td><div class="test">07 — Animaciones useFrame</div><div class="id">animation_stress</div></td>
+  <td><div class="pts">64 · 256 · 1K · 4K · 16K</div><div class="note">5 puntos, potencias de 4×</div></td>
+  <td><span class="tag tag-var">count</span></td>
+  <td><div class="note">Cada punto añade N callbacks al render loop. La diferencia entre 1K y 4K es más visible que entre 1K y 2K.</div></td>
+</tr>
+
+<tr>
+  <td><div class="test">08 — NPC IA asincrónica</div><div class="id">npc_ai</div></td>
+  <td><div class="pts">4 · 8 · 16 · 32</div><div class="note">4 puntos — límite cola=3</div></td>
+  <td><span class="tag tag-var">count</span></td>
+  <td><div class="note">El cuello de botella es la cola de requests (max 3 concurrent) y los re-renders de React. Por encima de 32 el comportamiento es saturación de cola, no del motor 3D.</div></td>
+</tr>
+
+<tr>
+  <td><div class="test">09 — Física (Rapier)</div><div class="id">physics_stress</div></td>
+  <td><div class="pts">32 · 64 · 128 · 256</div><div class="note">4 puntos, duplicando</div></td>
+  <td><span class="tag tag-var">count</span></td>
+  <td><div class="note">El Sim Step WASM crece aproximadamente lineal con N cuerpos activos. Duplicar permite estimar la pendiente sin demasiados puntos.</div></td>
+</tr>
+
+<tr>
+  <td><div class="test">10 — Materiales PBR</div><div class="id">materials_stress</div></td>
+  <td><div class="pts">8 · 32 · 128</div><div class="note">3 puntos bastan</div></td>
+  <td><span class="tag tag-var">count</span></td>
+  <td><div class="note">El costo dominante es la compilación de shaders (ocurre una sola vez) y el fill de fragments. Con 128 ya se ve el plateau; más objetos no revelan nueva información.</div></td>
+</tr>
+
+<tr>
+  <td><div class="test">11 — Post-procesado</div><div class="id">postprocessing_stress</div></td>
+  <td><div class="pts">32 · 128 · 512</div><div class="note">3 puntos — count es secundario</div></td>
+  <td><span class="tag tag-irrelevant">semi-irrelevante</span></td>
+  <td><div class="note">Los passes de SSAO y Bloom escalan con píxeles en pantalla, no con objetos. El count influye poco. Medir 3 puntos para confirmarlo y documentarlo.</div></td>
+</tr>
+
+<tr>
+  <td><div class="test">12 — Draw calls stress</div><div class="id">drawcalls_stress_test</div></td>
+  <td><div class="pts">64 · 256 · 512 · 1K · 2K</div><div class="note">5 puntos</div></td>
+  <td><span class="tag tag-var">count</span></td>
+  <td><div class="note">El Frame Time crece linealmente con draw calls (overhead por DC). 5 puntos permiten trazar la curva de degradación y encontrar el punto de quiebre visible.</div></td>
+</tr>
+
+</tbody>
+</table>
+
+<div style="display:flex;gap:12px;margin-top:1rem;flex-wrap:wrap">
+  <span style="font-size:11px;color:var(--color-text-secondary);display:flex;align-items:center;gap:5px"><span class="tag tag-var">count</span> el count afecta la métrica principal</span>
+  <span style="font-size:11px;color:var(--color-text-secondary);display:flex;align-items:center;gap:5px"><span class="tag tag-fixed">fijo</span> sin variable de escala</span>
+  <span style="font-size:11px;color:var(--color-text-secondary);display:flex;align-items:center;gap:5px"><span class="tag tag-irrelevant">semi-irrelevante</span> el count influye poco; medir por confirmación</span>
+</div>
+</div>
