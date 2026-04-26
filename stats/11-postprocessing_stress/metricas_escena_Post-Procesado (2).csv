@@ -1,0 +1,26 @@
+512 entidades
+
+Escena,FPS Promedio,GPU (ms),CPU (ms),Draw Calls,Triangulos,Geometrias,Texturas,Shaders,Lineas,Puntos,Memoria RAM (MB),VRAM Estimada (MB)
+Metricas Actuales,19.68,0.00,2.10,23,2031639,14,28,12,0,0,132.00,0.04
+
+Frame Time
+
+49.08ms
+
+Jitter
+
+2.25ms
+
+SSAO causa spikes de frame
+
+Peor Frame
+
+199.70ms
+
+máximo registrado
+
+Frame Budget
+
+294.5%
+
+de 16.67ms target 60fps
