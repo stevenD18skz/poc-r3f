@@ -218,7 +218,7 @@ function DrawCallsHUD({ metrics, count }: { metrics: DrawCallMetrics; count: num
 }
 
 export default function DrawCallsStressTest() {
-  const [count, setCount] = useState(64)
+  const [count, setCount] = useState(4096)
   const [metrics, setMetrics] = useState<DrawCallMetrics>({
     frameTime: 0, jitter: 0, frameBudget: 0, drawCalls: 0,
   })
@@ -231,7 +231,7 @@ export default function DrawCallsStressTest() {
         input={true}
         count={count}
         setCount={setCount}
-        inputConfig={{ unit: 'normal', type: 'values', values: [64, 256, 512, 1000, 2000] }}
+        inputConfig={{ unit: 'normal', type: 'values', values: [64, 256, 512, 1024, 4096] }}
       />
 
       <DrawCallsHUD metrics={metrics} count={count} />
@@ -249,6 +249,8 @@ export default function DrawCallsStressTest() {
         </Suspense>
       </Canvas>
 
+    
+      {/* {metrics.drawCalls} 
       <div className="absolute bottom-6 left-6 bg-black/70 p-4 rounded-lg border border-cyan-500 text-white text-xs max-w-xs">
         <h3 className="font-bold text-cyan-400 mb-2">Especificaciones del test</h3>
         <ul className="space-y-1 text-gray-300">
@@ -260,7 +262,7 @@ export default function DrawCallsStressTest() {
           <li>• Sombras: OFF (aislar draw call cost)</li>
           <li>• Escena: estática (sin animación)</li>
         </ul>
-      </div>
+      </div>*/}
     </main>
   )
 }

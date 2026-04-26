@@ -124,7 +124,7 @@ function PostMetricsHUD({ metrics }: { metrics: PostMetrics }) {
         <p className="text-gray-400 text-xs uppercase tracking-widest mb-2">Efectos Activos</p>
         {['SSAO', 'Bloom', 'Noise', 'Vignette', 'Brightness/Contrast'].map(e => (
           <div key={e} className="flex items-center gap-2 text-[11px] mb-1">
-            <span className="w-1.5 h-1.5 rounded-full bg-purple-400 flex-shrink-0" />
+            <span className="w-1.5 h-1.5 rounded-full bg-purple-400 shrink-0" />
             <span className="text-gray-300">{e}</span>
           </div>
         ))}
