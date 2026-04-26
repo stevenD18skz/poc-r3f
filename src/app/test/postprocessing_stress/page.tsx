@@ -14,10 +14,10 @@ import { EffectComposer, Bloom, SSAO, Vignette, Noise, BrightnessContrast } from
 // ─────────────────────────────────────────────
 // Geometría: N esferas ESTÁTICAS (no se mueven en useFrame)
 // Razón: los objetos estáticos aíslan el costo de los efectos de post-proceso
-// Si los objetos se animaran, no sabrías si el lag viene de la animación o del SSAO/Bloom
-// Efectos: SSAO + Bloom + Noise + Vignette + BrightnessContrast
+// Efectos: SSAO + Bloom + Noise + Vignette + BrightnessContrast (5 passes)
 // Lo que mides: costo GPU de los render passes adicionales por frame
 // Métrica clave: Jitter (SSAO causa spikes de frame time)
+// Rango recomendado para documento: 32, 128, 512 (no todo el slider)
 // ─────────────────────────────────────────────
 
 const sphereGeom = new THREE.SphereGeometry(1, 32, 32)
@@ -65,8 +65,6 @@ function MetricsCollector({ onUpdate }: { onUpdate: (m: PostMetrics) => void }) 
   return null
 }
 
-// ✅ Objetos ESTÁTICOS: matrices calculadas una sola vez con useEffect
-// El costo de post-processing no depende de si los objetos se mueven
 function StaticEmitters({ count }: { count: number }) {
   const meshRef = useRef<THREE.InstancedMesh>(null!)
   const tempObject = useRef(new THREE.Object3D()).current
@@ -91,19 +89,11 @@ function StaticEmitters({ count }: { count: number }) {
 
   return (
     <instancedMesh ref={meshRef} args={[sphereGeom, undefined, count]}>
-      <meshStandardMaterial
-        roughness={0}
-        metalness={1}
-        emissive="#ffffff"
-        emissiveIntensity={3} // Alto para activar Bloom
-      />
+      <meshStandardMaterial roughness={0} metalness={1} emissive="#ffffff" emissiveIntensity={3} />
     </instancedMesh>
   )
 }
 
-// ─────────────────────────────────────────────
-// HUD
-// ─────────────────────────────────────────────
 function PostMetricsHUD({ metrics }: { metrics: PostMetrics }) {
   const jitterColor = metrics.jitter < 2 ? 'text-emerald-400' : metrics.jitter < 6 ? 'text-yellow-400' : 'text-red-400'
   const budgetColor = metrics.frameBudget < 50 ? 'text-emerald-400' : metrics.frameBudget < 85 ? 'text-yellow-400' : 'text-red-400'
@@ -115,28 +105,21 @@ function PostMetricsHUD({ metrics }: { metrics: PostMetrics }) {
         <p className="text-gray-400 text-xs uppercase tracking-widest mb-1">Frame Time</p>
         <p className="text-2xl font-mono font-black text-slate-300">{metrics.frameTime.toFixed(2)}<span className="text-xs text-gray-500 ml-1">ms</span></p>
       </div>
-
-      {/* Jitter: especialmente relevante con SSAO */}
       <div className="bg-black/80 backdrop-blur border border-orange-500/40 px-4 py-3 rounded-xl">
         <p className="text-gray-400 text-xs uppercase tracking-widest mb-1">Jitter</p>
         <p className={`text-2xl font-mono font-black ${jitterColor}`}>{metrics.jitter.toFixed(2)}<span className="text-xs text-gray-500 ml-1">ms</span></p>
         <p className="text-gray-600 text-[10px]">SSAO causa spikes de frame</p>
       </div>
-
-      {/* Peak frame: peor frame registrado */}
       <div className="bg-black/80 backdrop-blur border border-red-500/40 px-4 py-3 rounded-xl">
         <p className="text-gray-400 text-xs uppercase tracking-widest mb-1">Peor Frame</p>
         <p className={`text-2xl font-mono font-black ${peakColor}`}>{metrics.peakFrame.toFixed(2)}<span className="text-xs text-gray-500 ml-1">ms</span></p>
         <p className="text-gray-600 text-[10px]">máximo registrado</p>
       </div>
-
       <div className="bg-black/80 backdrop-blur border border-blue-500/40 px-4 py-3 rounded-xl">
         <p className="text-gray-400 text-xs uppercase tracking-widest mb-1">Frame Budget</p>
         <p className={`text-2xl font-mono font-black ${budgetColor}`}>{metrics.frameBudget.toFixed(1)}<span className="text-xs text-gray-500 ml-1">%</span></p>
         <p className="text-gray-600 text-[10px]">de 16.67ms target 60fps</p>
       </div>
-
-      {/* Lista de efectos activos */}
       <div className="bg-black/80 backdrop-blur border border-purple-500/40 px-4 py-3 rounded-xl">
         <p className="text-gray-400 text-xs uppercase tracking-widest mb-2">Efectos Activos</p>
         {['SSAO', 'Bloom', 'Noise', 'Vignette', 'Brightness/Contrast'].map(e => (
@@ -151,7 +134,7 @@ function PostMetricsHUD({ metrics }: { metrics: PostMetrics }) {
 }
 
 export default function PostProcessingStressTest() {
-  const [count, setCount] = useState(32)
+  const [count, setCount] = useState(64)
   const [metrics, setMetrics] = useState<PostMetrics>({ jitter: 0, frameBudget: 0, frameTime: 0, peakFrame: 0 })
   const handleMetrics = useCallback((m: PostMetrics) => setMetrics(m), [])
 
@@ -177,10 +160,10 @@ export default function PostProcessingStressTest() {
           <ambientLight intensity={0.3} />
           <pointLight position={[10, 10, 10]} intensity={10} color="#3b82f6" />
 
-          {/* ✅ Estáticos: aisla costo de efectos, no de animación */}
           <StaticEmitters count={count} />
 
-          <EffectComposer>
+          {/* ✅ enableNormalPass: requerido por SSAO para leer normales de la escena */}
+          <EffectComposer enableNormalPass>
             <SSAO intensity={20} luminanceInfluence={0.5} radius={0.4} bias={0.035} />
             <Bloom intensity={1.5} luminanceThreshold={0.5} luminanceSmoothing={0.9} height={300} />
             <Noise opacity={0.05} />
@@ -188,7 +171,7 @@ export default function PostProcessingStressTest() {
             <BrightnessContrast brightness={0.05} contrast={0.1} />
           </EffectComposer>
 
-          <mesh rotation-x={-Math.PI / 2} position={[0, -10, 0]} receiveShadow>
+          <mesh rotation-x={-Math.PI / 2} position={[0, -10, 0]}>
             <planeGeometry args={[100, 100]} />
             <meshStandardMaterial color="#111" roughness={0.5} />
           </mesh>

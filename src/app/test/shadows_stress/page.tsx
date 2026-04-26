@@ -52,35 +52,6 @@ function MetricsCollector({ onUpdate }: { onUpdate: (m: any) => void }) {
 }
 
 function ShadowStressHUD({ metrics, lightCount }: { metrics: any, lightCount: number }) {
-  const stats = useRef({ ftSum: 0, jSum: 0, samples: 0 })
-
-  useEffect(() => {
-    stats.current.ftSum += metrics.frameTime
-    stats.current.jSum += metrics.jitter
-    stats.current.samples++
-  }, [metrics])
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      if (stats.current.samples > 0) {
-        const n = stats.current.samples
-        const avgFT = stats.current.ftSum / n
-        const avgJ = stats.current.jSum / n
-        const passes = 1 + lightCount
-        const vram = (lightCount * 512 * 512 * 4 / 1048576).toFixed(1)
-        
-        console.log(
-          `%c[5s Avg - Shadow Stress] FT: ${avgFT.toFixed(2)}ms | Jitter: ${avgJ.toFixed(2)}ms | Passes: ${passes} | DC Mult: x${passes} | VRAM: ${vram}MB`,
-          'color: #a855f7; font-weight: bold;'
-        )
-        
-        stats.current.ftSum = 0
-        stats.current.jSum = 0
-        stats.current.samples = 0
-      }
-    }, 5000)
-    return () => clearInterval(interval)
-  }, [lightCount])
 
   const jitterColor = metrics.jitter < 1 ? 'text-emerald-400' : metrics.jitter < 3 ? 'text-yellow-400' : 'text-red-400'
   const renderPasses = 1 + lightCount
@@ -332,7 +303,7 @@ export default function ShadowsStressTest() {
   return (
     <main className="relative w-full h-screen bg-[#050505] overflow-hidden">
       <ShadowStressHUD metrics={metrics} lightCount={lightCount} />
-      <Canvas shadows camera={{ position: [0, 20, 25], fov: 60 }} dpr={[1, 2]}>
+      <Canvas shadows camera={{ position: [0, 60, 0], fov: 60 }} dpr={[1, 2]}>
         <MetricsCollector onUpdate={setMetrics} />
         <DebugTools title="Estrés de Sombras (Arena)" entityCount={count} />
 
@@ -350,7 +321,7 @@ export default function ShadowsStressTest() {
         inputConfig={{
           unit: 'normal',
           type: 'values',
-          values: [64, 256, 1000, 4000],
+          values: [64, 256, 1024, 4096, 16384],
         }}
       >
         <div className="bg-white/5 px-6 py-3 border-t border-white/10 flex flex-col gap-4 rounded-3xl mt-4">

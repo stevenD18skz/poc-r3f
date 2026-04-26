@@ -1,0 +1,25 @@
+64 entidades
+
+Escena,FPS Promedio,GPU (ms),CPU (ms),Draw Calls,Triangulos,Geometrias,Texturas,Shaders,Lineas,Puntos,Memoria RAM (MB),VRAM Estimada (MB)
+Metricas Actuales,94.66,0.00,6.47,436,4762,436,2,4,0,0,164.80,0.21
+
+NPCs Activos
+
+64
+
+Requests Totales
+
+94
+
+Latencia Promedio
+
+10657ms
+
+Tasa de Éxito
+
+100%
+
+Scripting CPU JS avg+jitter / frame
+
+12.86ms
+

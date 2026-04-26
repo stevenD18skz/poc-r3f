@@ -204,7 +204,7 @@ export default function MaterialsStressTest() {
         input={true}
         count={count}
         setCount={setCount}
-        inputConfig={{ unit: 'normal', type: 'values', values: [8, 32, 128] }}
+        inputConfig={{ unit: 'normal', type: 'values', values: [8, 16, 32, 64, 128] }}
       />
 
       <MaterialsHUD metrics={metrics} count={count} />

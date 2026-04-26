@@ -1,0 +1,26 @@
+64 entidades
+
+Escena,FPS Promedio,GPU (ms),CPU (ms),Draw Calls,Triangulos,Geometrias,Texturas,Shaders,Lineas,Puntos,Memoria RAM (MB),VRAM Estimada (MB)
+Metricas Actuales,99.08,0.00,1.06,64,5120,1,1,1,0,0,321.30,0.01
+
+Frame Time
+
+9.92ms
+
+promedio últimos 60 frames
+
+Jitter
+
+1.26ms
+
+desv. estándar frame time
+
+Frame Budget
+
+59.5%
+
+de 16.67ms (60fps target)
+
+useFrame loops
+
+65 = 64 esferas + 1 monitor

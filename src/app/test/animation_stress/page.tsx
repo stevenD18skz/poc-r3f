@@ -173,41 +173,6 @@ function AnimMetricsHUD({
     metrics.frameBudget < 80 ? 'text-yellow-400' :
     'text-red-400'
 
-  const stats = useRef({
-    ftSum: 0,
-    jSum: 0,
-    bSum: 0,
-    samples: 0
-  })
-
-  useEffect(() => {
-    stats.current.ftSum += metrics.frameTime
-    stats.current.jSum += metrics.jitter
-    stats.current.bSum += metrics.frameBudget
-    stats.current.samples++
-  }, [metrics])
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      if (stats.current.samples > 0) {
-        const n = stats.current.samples
-        const avgFT = stats.current.ftSum / n
-        const avgJ = stats.current.jSum / n
-        const avgB = stats.current.bSum / n
-        
-        console.log(
-          `%c[5s Avg] FT: ${avgFT.toFixed(2)}ms | Jitter: ${avgJ.toFixed(2)}ms | Budget: ${avgB.toFixed(1)}% | Loops: ${count + 1}`,
-          'color: #a78bfa; font-weight: bold;'
-        )
-        
-        stats.current.ftSum = 0
-        stats.current.jSum = 0
-        stats.current.bSum = 0
-        stats.current.samples = 0
-      }
-    }, 5000)
-    return () => clearInterval(interval)
-  }, [count])
 
   return (
     <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-2 min-w-[170px]">
@@ -259,7 +224,7 @@ function AnimMetricsHUD({
 // PÁGINA PRINCIPAL
 // ─────────────────────────────────────────────
 export default function AnimationStressTest() {
-  const [count, setCount] = useState(64)
+  const [count, setCount] = useState(16000)
   const [metrics, setMetrics] = useState<AnimMetrics>({
     jitter: 0,
     frameBudget: 0,

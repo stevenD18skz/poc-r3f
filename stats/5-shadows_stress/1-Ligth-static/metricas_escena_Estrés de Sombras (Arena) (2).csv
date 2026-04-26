@@ -1,0 +1,20 @@
+4096 entidades
+
+Escena,FPS Promedio,GPU (ms),CPU (ms),Draw Calls,Triangulos,Geometrias,Texturas,Shaders,Lineas,Puntos,Memoria RAM (MB),VRAM Estimada (MB)
+Metricas Actuales,101.01,0.00,1.09,43,344596,7,2,7,0,0,128.09,0.01
+
+Frame Time
+
+10.00ms
+
+Shadow Update Jitter
+
+1.20ms
+
+Render Passes / DC Mult
+
+2x
+
+Shadow Map VRAM
+
+1.0MB

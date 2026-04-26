@@ -220,7 +220,7 @@ function NetworkMetricsHUD({ metrics, npcCount, scriptingMs }: { metrics: ApiMet
 }
 
 export default function NpcAiTest() {
-  const [npcCount, setNpcCount] = useState(4)
+  const [npcCount, setNpcCount] = useState(512)
   const [npcStates, setNpcStates] = useState<NpcState[]>([])
   const [scriptingMs, setScriptingMs] = useState(0)
   const [metrics, setMetrics] = useState<ApiMetrics>({
@@ -305,7 +305,7 @@ export default function NpcAiTest() {
         input={true}
         count={npcCount}
         setCount={setNpcCount}
-        inputConfig={{ unit: 'normal', type: 'values', values: [4, 8, 16, 32] }}
+        inputConfig={{ unit: 'normal', type: 'values', values: [4, 16, 64, 256, 512] }}
       />
       <NetworkMetricsHUD metrics={metrics} npcCount={npcCount} scriptingMs={scriptingMs} />
       <Canvas camera={{ position: [0, 14, 18], fov: 50 }}>
@@ -319,3 +319,25 @@ export default function NpcAiTest() {
     </main>
   )
 }
+
+/**
+NPCs Activos
+
+4
+
+Requests Totales
+
+3
+
+Latencia Promedio
+
+1013ms
+
+Tasa de Éxito
+
+100%
+
+Scripting CPU
+
+11.16ms
+ */
