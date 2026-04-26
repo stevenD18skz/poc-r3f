@@ -2,7 +2,7 @@
 
 import { Canvas, useFrame } from '@react-three/fiber'
 import { useState, useMemo, useRef, useCallback, Suspense } from 'react'
-import { Physics, RigidBody, CuboidCollider, RapierRigidBody, useRapier } from '@react-three/rapier'
+import { Physics, RigidBody, CuboidCollider, RapierRigidBody, useRapier, useBeforePhysicsStep, useAfterPhysicsStep } from '@react-three/rapier'
 import * as THREE from 'three'
 import PerformanceOverlay from '@/components/test/PerformanceOverlay'
 import DebugTools from '@/components/DebugTools'
@@ -45,6 +45,16 @@ interface PhysicsMetrics {
 function PhysicsMetricsCollector({ onUpdate }: { onUpdate: (m: PhysicsMetrics) => void }) {
   const { world } = useRapier()
   const fc = useRef(0)
+  const simStart = useRef(0)
+  const simStepMs = useRef(0)
+
+  useBeforePhysicsStep(() => {
+    simStart.current = performance.now()
+  })
+
+  useAfterPhysicsStep(() => {
+    simStepMs.current = performance.now() - simStart.current
+  })
 
   useFrame((_, delta) => {
     const ms = delta * 1000
@@ -61,13 +71,16 @@ function PhysicsMetricsCollector({ onUpdate }: { onUpdate: (m: PhysicsMetrics) =
     let variance = 0
     for (let i = 0; i < n; i++) { const d = frameBuffer[i] - mean; variance += d * d }
 
-    // ✅ Rapier world data: tiempo real de la simulación WASM
-    const perf = (world as any).performanceData?.()
-    const simStep = perf?.totalTime ?? 0
+    let activeCount = 0
+    rigidBodyMap.forEach((rb) => {
+      if (rb && typeof rb.isSleeping === 'function' && !rb.isSleeping()) {
+        activeCount++
+      }
+    })
 
     onUpdate({
-      simStepMs: Math.round(simStep * 100) / 100,
-      activeBodies: world.bodies.len(),
+      simStepMs: Math.round(simStepMs.current * 100) / 100,
+      activeBodies: activeCount,
       jitter: Math.round(Math.sqrt(variance / n) * 100) / 100,
       frameBudget: Math.round((mean / 16.667) * 1000) / 10,
     })
@@ -124,7 +137,7 @@ function PhysicsBody({ id, initialPosition, color, isSphere }: {
   const refCallback = useCallback((rb: RapierRigidBody | null) => {
     if (rb) rigidBodyMap.set(id, rb)
     else rigidBodyMap.delete(id)
-    ;(rbRef as any).current = rb
+      ; (rbRef as any).current = rb
   }, [id])
 
   return (
@@ -203,7 +216,7 @@ function Bowl() {
   )
 }
 
-function PhysicsScene({ count }: { count: number }) {
+function PhysicsScene({ count, setMetrics }: { count: number, setMetrics: (m: PhysicsMetrics) => void }) {
   const bodies = useMemo(() => Array.from({ length: count }, (_, i) => ({
     id: i,
     initialPosition: [
@@ -233,6 +246,7 @@ function PhysicsScene({ count }: { count: number }) {
       <pointLight position={[-8, 5, -8]} intensity={15} color="#f43f5e" />
 
       <Physics gravity={[0, -9.81, 0]} timeStep={1 / 60}>
+        <PhysicsMetricsCollector onUpdate={setMetrics} />
         <RespawnManager count={count} />
 
         {bodies.map((b) => (
@@ -302,7 +316,7 @@ function PhysicsMetricsHUD({ metrics, count }: { metrics: PhysicsMetrics; count:
 }
 
 export default function PhysicsStressTest() {
-  const [count, setCount] = useState(32)
+  const [count, setCount] = useState(1024)
   const [metrics, setMetrics] = useState<PhysicsMetrics>({
     simStepMs: 0, activeBodies: 0, jitter: 0, frameBudget: 0,
   })
@@ -314,7 +328,7 @@ export default function PhysicsStressTest() {
         input={true}
         count={count}
         setCount={setCount}
-        inputConfig={{ unit: 'normal', type: 'values', values: [32, 64, 128, 256] }}
+        inputConfig={{ unit: 'normal', type: 'values', values: [16, 64, 128, 512, 1024, 2048] }}
       />
 
       <PhysicsMetricsHUD metrics={metrics} count={count} />
@@ -323,14 +337,11 @@ export default function PhysicsStressTest() {
         <DebugTools title="Estrés de Física (Rapier)" entityCount={count} />
         <Suspense fallback={<Loader3D />}>
           <OrbitControls makeDefault target={[0, 4, 0]} />
-          <PhysicsScene count={count} />
-          {/* Collector dentro de Physics para acceder a useRapier */}
-          <Physics gravity={[0, 0, 0]} timeStep={1 / 60}>
-            <PhysicsMetricsCollector onUpdate={setMetrics} />
-          </Physics>
+          <PhysicsScene count={count} setMetrics={setMetrics} />
         </Suspense>
       </Canvas>
 
+      {/* 
       <div className="absolute bottom-6 left-6 bg-black/70 p-4 rounded-lg border border-orange-500 text-white text-xs max-w-xs">
         <h3 className="font-bold text-orange-400 mb-2">Especificaciones del test</h3>
         <ul className="space-y-1 text-gray-300">
@@ -343,6 +354,7 @@ export default function PhysicsStressTest() {
           <li>• ⚠️ Motores distintos</li>
         </ul>
       </div>
+      */}
     </main>
   )
 }

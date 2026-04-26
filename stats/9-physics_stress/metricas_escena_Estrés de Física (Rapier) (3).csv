@@ -1,0 +1,28 @@
+512 entidades
+
+Escena,FPS Promedio,GPU (ms),CPU (ms),Draw Calls,Triangulos,Geometrias,Texturas,Shaders,Lineas,Puntos,Memoria RAM (MB),VRAM Estimada (MB)
+Metricas Actuales,51.67,0.00,10.99,1040,141620,522,3,2,0,0,337.56,1.93
+
+Sim Step (WASM)
+
+2.90ms
+
+tiempo puro de Rapier
+
+Cuerpos Activos
+
+512/ 512
+
+canSleep: false
+
+Jitter
+
+23.10ms
+
+varianza frame time
+
+Frame Budget
+
+120.8%
+
+de 16.67ms (60fps)
