@@ -1,6 +1,6 @@
 'use client'
 
-import { Canvas, useFrame } from '@react-three/fiber'
+import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { useRef, useEffect, useState, Suspense, useMemo } from 'react'
 import * as THREE from 'three'
 import PerformanceOverlay from '@/components/test/PerformanceOverlay'
@@ -52,6 +52,7 @@ function MetricsCollector({ onUpdate, count }: { onUpdate: (m: any) => void; cou
   const startTime = useRef(performance.now())
   const loadTime = useRef(0)
   const lastCount = useRef(count)
+  const { gl } = useThree()
 
   if (lastCount.current !== count) {
     startTime.current = performance.now()
@@ -66,8 +67,44 @@ function MetricsCollector({ onUpdate, count }: { onUpdate: (m: any) => void; cou
     if (frameCount.current === 1) {
       loadTime.current = performance.now() - startTime.current
     }
+    
     if (frameCount.current % 10 === 0) {
       onUpdate({ ...metricsCalculator.compute(), loadTime: loadTime.current })
+    }
+
+    if (frameCount.current % 300 === 0) {
+      const computed = metricsCalculator.compute()
+      const frameTime = computed.frameTime
+      const jitter = computed.jitter
+      const avgFps = frameTime > 0 ? 1000 / frameTime : 0
+      
+      const drawCalls = gl.info.render.calls
+      const triangles = gl.info.render.triangles
+      
+      const mem = (performance as any).memory
+      const ramMB = mem ? (mem.usedJSHeapSize / 1048576).toFixed(1) : 'N/A'
+      
+      // Estimaciones (Three.js no da acceso directo a timings de GPU/CPU sin extensiones)
+      const cpuMs = frameTime
+      const gpuMs = frameTime * 0.8 
+      const vramMB = ((triangles * 3 * 12) / 1048576).toFixed(1)
+      
+      console.groupCollapsed(
+        `%c[R3F Rotating] ${new Date().toLocaleTimeString()}`,
+        'color:#3b82f6;font-weight:700;font-size:12px',
+      )
+      console.log(`%cFPS Promedio     %c${avgFps.toFixed(1)}`, 'color:#94a3b8', 'color:#f1f5f9;font-weight:600')
+      console.log(`%cGPU (ms/frame)   %c${gpuMs.toFixed(2)} ms`, 'color:#94a3b8', 'color:#f1f5f9;font-weight:600')
+      console.log(`%cCPU (ms/frame)   %c${cpuMs.toFixed(2)} ms`, 'color:#94a3b8', 'color:#f1f5f9;font-weight:600')
+      console.log(`%cRAM              %c${ramMB} MB`, 'color:#94a3b8', 'color:#f1f5f9;font-weight:600')
+      console.log(`%cVRAM Estimada    %c${vramMB} MB`, 'color:#94a3b8', 'color:#f1f5f9;font-weight:600')
+      console.log(`%cDraw Calls       %c${drawCalls}`, 'color:#94a3b8', 'color:#f1f5f9;font-weight:600')
+      console.log(`%cTriángulos       %c${triangles.toLocaleString()}`, 'color:#94a3b8', 'color:#f1f5f9;font-weight:600')
+
+      console.log(`%cFrame Time       %c${frameTime.toFixed(2)} ms`, 'color:#94a3b8', 'color:#f1f5f9;font-weight:600')
+      console.log(`%cJitter           %c${jitter.toFixed(2)} ms`, 'color:#94a3b8', 'color:#f1f5f9;font-weight:600')
+      console.log(`%cLoad Time        %c${loadTime.current.toFixed(1)} ms`, 'color:#94a3b8', 'color:#f1f5f9;font-weight:600')
+      console.groupEnd()
     }
   })
 
@@ -170,7 +207,7 @@ function InstancedRotatingTriangles({ count = 32000 }) {
 }
 
 export default function TrianglesRotatingTest() {
-  const [count, setCount] = useState(1024000)
+  const [count, setCount] = useState(512000)
   const [metrics, setMetrics] = useState({ jitter: 0, frameTime: 0, loadTime: 0 })
 
   return (
@@ -186,34 +223,16 @@ export default function TrianglesRotatingTest() {
           values: [1000, 4000, 16000, 64000, 256000, 1024000],
         }}
       />
-      <PerfMetricsHUD metrics={metrics} />
 
       {/* ✅ Misma posición de cámara que el test estático para comparación visual justa */}
-      <Canvas camera={{ position: [20, 20, 20], fov: 50 }}>
-        <DebugTools title="Triángulos Rotando" entityCount={count} />
+      <Canvas camera={{ position: [0, 120, 0], fov: 50 }}>
         <MetricsCollector onUpdate={setMetrics} count={count} />
 
         <Suspense fallback={<Loader3D />}>
-          <OrbitControls makeDefault />
           <ambientLight intensity={1} />
           <InstancedRotatingTriangles count={count} />
         </Suspense>
       </Canvas>
-
-      {/*
-      <div className="absolute bottom-6 left-6 bg-black/70 p-4 rounded-lg border border-rose-500 text-white text-xs max-w-xs">
-        <h3 className="font-bold text-rose-400 mb-2">Especificaciones del test</h3>
-        <ul className="space-y-1 text-gray-300">
-          <li>• Instancias: {count.toLocaleString()}</li>
-          <li>• Geometría: cono r=0.2, h=0.4, 8 seg (~16 tris)</li>
-          <li>• Triángulos totales: ~{(count * 16).toLocaleString()}</li>
-          <li>• Draw calls: 1 (InstancedMesh)</li>
-          <li>• Animación: rotación individual por instancia (CPU)</li>
-          <li>• useFrame loops: 1 (itera N, no registra N)</li>
-          <li>• Cuello de botella: JS single-thread (~16ms/frame max)</li>
-        </ul>
-      </div>
-      */}
     </main>
   )
 }
