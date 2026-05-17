@@ -1,114 +1,169 @@
 'use client'
 
-import { Canvas, useFrame } from '@react-three/fiber'
+import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { useRef, useEffect, useState, Suspense } from 'react'
 import * as THREE from 'three'
 import PerformanceOverlay from '@/components/test/PerformanceOverlay'
-import DebugTools from '@/components/DebugTools'
 import { OrbitControls } from '@react-three/drei'
+// Importamos la librería de rendimiento y su hook de telemetría directo
+import { Perf, getPerf } from 'r3f-perf'
+import DebugTool from '@/components/DebugTools'
 
-// ─────────────────────────────────────────────
-// PARÁMETROS DEL TEST (deben ser idénticos en Babylon)
-// ─────────────────────────────────────────────
-// Geometría: cono radio 0.2, altura 0.4, 8 segmentos (= ~16 triángulos)
-// Instancias: N (1 draw call total)
-// Animación: NINGUNA (GPU puro, sin overhead de CPU)
-// Iluminación: ambientLight intensity=1 únicamente
-// Fondo: color sólido #050505 (sin IBL)
-// Lo que mides: rendimiento GPU de renderizado estático puro
-// ─────────────────────────────────────────────
+// ─── CONFIGURACIÓN DE MUESTREO SÓLIDO ─────────────────────────────────────────
+const JITTER_SAMPLE_SIZE = 120
 
-// ─── MÉTRICAS ────────────────────────────────────────────────────────────────
-const JITTER_SAMPLE_SIZE = 60
-const metricsCalculator = {
+// Dos calculadores separados: uno para delta real, uno para cpu
+const deltaCalculator = {
   samples: new Float32Array(JITTER_SAMPLE_SIZE),
   index: 0,
   filled: 0,
-  push(delta: number) {
-    const ms = delta * 1000
-    this.samples[this.index] = ms
+  push(deltaMs: number) {
+    this.samples[this.index] = deltaMs
     this.index = (this.index + 1) % JITTER_SAMPLE_SIZE
     this.filled = Math.min(this.filled + 1, JITTER_SAMPLE_SIZE)
   },
-  compute() {
-    if (this.filled < 2) return { jitter: 0, frameTime: 0 }
+  mean() {
+    if (this.filled < 1) return 0
     let sum = 0
     for (let i = 0; i < this.filled; i++) sum += this.samples[i]
-    const mean = sum / this.filled
+    return sum / this.filled
+  },
+  // Jitter = desviación estándar de los deltas reales entre frames
+  jitter() {
+    if (this.filled < 2) return 0
+    const m = this.mean()
     let variance = 0
     for (let i = 0; i < this.filled; i++) {
-      const diff = this.samples[i] - mean
+      const diff = this.samples[i] - m
       variance += diff * diff
     }
-    return {
-      jitter: Math.round(Math.sqrt(variance / this.filled) * 100) / 100,
-      frameTime: Math.round(mean * 100) / 100,
-    }
+    return Math.round(Math.sqrt(variance / this.filled) * 100) / 100
   },
+  // P95 de los deltas para detectar spikes
+  p95() {
+    if (this.filled < 2) return 0
+    const sorted = this.samples.slice(0, this.filled).sort()
+    return sorted[Math.floor(this.filled * 0.95)]
+  },
+  reset() {
+    this.index = 0
+    this.filled = 0
+  }
 }
 
 function MetricsCollector({ onUpdate, count }: { onUpdate: (m: any) => void; count: number }) {
   const frameCount = useRef(0)
   const startTime = useRef(performance.now())
+  const lastLogTime = useRef(performance.now())
   const loadTime = useRef(0)
+  // maxFrameTime ahora trackea el pico del período actual (últimos 10s)
+  const periodMaxFrameTime = useRef(0)
   const lastCount = useRef(count)
+  const { gl } = useThree()
 
   if (lastCount.current !== count) {
     startTime.current = performance.now()
+    lastLogTime.current = performance.now()
     lastCount.current = count
     frameCount.current = 0
     loadTime.current = 0
+    periodMaxFrameTime.current = 0
+    deltaCalculator.reset()
   }
 
   useFrame((_, delta) => {
-    metricsCalculator.push(delta)
     frameCount.current++
-    if (frameCount.current === 1) {
-      loadTime.current = performance.now() - startTime.current
+    const now = performance.now()
+    // Delta real entre frames (lo que importa para jitter y frame time)
+    const deltaMs = delta * 1000
+
+    // Alimentar el calculador con deltas reales, no con CPU time
+    deltaCalculator.push(deltaMs)
+
+    // Pico del período actual
+    if (deltaMs > periodMaxFrameTime.current) {
+      periodMaxFrameTime.current = deltaMs
     }
+
+    if (frameCount.current === 1) {
+      loadTime.current = now - startTime.current
+    }
+
+    const perfState = getPerf ? getPerf() : null
+    const logData = perfState?.log
+
+    // HUD: actualizar cada 10 frames
     if (frameCount.current % 10 === 0) {
-      onUpdate({ ...metricsCalculator.compute(), loadTime: loadTime.current })
+      onUpdate({
+        // Frame time = media de los deltas reales entre frames
+        frameTime: Math.round(deltaCalculator.mean() * 100) / 100,
+        // Jitter = std dev de esos mismos deltas
+        jitter: deltaCalculator.jitter(),
+        loadTime: loadTime.current,
+        // CPU time de r3f-perf, reportado separado y con su nombre correcto
+        cpuTime: logData?.cpu ?? 0,
+      })
+    }
+
+    // Log cada 10 segundos
+    if (now - lastLogTime.current >= 10000) {
+      const perf = getPerf ? getPerf() : null
+      const data = perf?.log || { fps: 0, cpu: 0, mem: 0 }
+
+      const frameTimeMean = deltaCalculator.mean()
+      const avgFps = frameTimeMean > 0 ? 1000 / frameTimeMean : 0
+      const jitter = deltaCalculator.jitter()
+      const p95 = deltaCalculator.p95()
+
+      const drawCalls = gl.info.render.calls
+      const triangles = gl.info.render.triangles
+
+      // VRAM: estimación honesta con los buffers que Three.js sí reporta
+      // Posiciones: triangles * 3 verts * 12 bytes (3 floats)
+      // Normales: mismo tamaño que posiciones
+      // UVs: triangles * 3 verts * 8 bytes (2 floats)
+      // Instance matrices: count * 64 bytes (mat4 de floats)
+      // Instance colors: count * 12 bytes (vec3 de floats)
+      const posBytes = triangles * 3 * 12
+      const normalBytes = posBytes
+      const uvBytes = triangles * 3 * 8
+      const matrixBytes = count * 64
+      const colorBytes = count * 12
+      const totalBytes = posBytes + normalBytes + uvBytes + matrixBytes + colorBytes
+      const vramMB = (totalBytes / 1048576).toFixed(2)
+
+      const ramMB = data.mem?.toFixed(1) ?? 'N/A'
+
+      console.log(
+        `%c[R3F Static] ${count.toLocaleString()} Instancias - ${new Date().toLocaleTimeString()}`,
+        'color:#3b82f6;font-weight:700;font-size:12px',
+      )
+      console.log(`%cFPS Promedio         %c${avgFps.toFixed(1)}`, 'color:#94a3b8', 'color:#f1f5f9;font-weight:600')
+      console.log(`%cRAM                  %c${ramMB} MB`, 'color:#94a3b8', 'color:#f1f5f9;font-weight:600')
+      console.log(`%cVRAM Estimada        %c${vramMB} MB (geom+inst)`, 'color:#94a3b8', 'color:#f1f5f9;font-weight:600')
+      // CPU time de r3f-perf reportado con su nombre exacto, separado de frame time
+      console.log(`%cCPU r3f-perf (ms)    %c${data.cpu.toFixed(2)} ms`, 'color:#94a3b8', 'color:#60a5fa;font-weight:600')
+      console.log(`%cFrame Time (media)   %c${frameTimeMean.toFixed(2)} ms`, 'color:#94a3b8', 'color:#f1f5f9;font-weight:600')
+      console.log(`%cFrame Time (P95)     %c${p95.toFixed(2)} ms`, 'color:#94a3b8', 'color:#fbbf24;font-weight:600')
+      console.log(`%cJitter               %c${jitter.toFixed(2)} ms`, 'color:#94a3b8', 'color:#f1f5f9;font-weight:600')
+      console.log(`%cLoad Time            %c${loadTime.current.toFixed(1)} ms`, 'color:#94a3b8', 'color:#f1f5f9;font-weight:600')
+      console.log(`%cDraw Calls           %c${drawCalls}`, 'color:#94a3b8', 'color:#f1f5f9;font-weight:600')
+      // Pico del período actual (se resetea en cada log)
+      console.log(`%cPico Latencia (10s)  %c${periodMaxFrameTime.current.toFixed(2)} ms`, 'color:#94a3b8', 'color:#f87171;font-weight:600')
+      // console.groupEnd()
+
+      // Reset del pico al iniciar nuevo período
+      periodMaxFrameTime.current = 0
+      lastLogTime.current = now
     }
   })
 
   return null
 }
 
-function PerfMetricsHUD({ metrics }: { metrics: any }) {
-
-  const jitterColor =
-    metrics.jitter < 1 ? 'text-emerald-400' :
-    metrics.jitter < 3 ? 'text-yellow-400' :
-    'text-red-400'
-
-  return (
-    <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-2 min-w-[170px]">
-      <div className="bg-black/80 backdrop-blur-xl border border-slate-500/40 px-4 py-3 rounded-xl">
-        <p className="text-gray-400 text-xs uppercase tracking-widest mb-1">Frame Time</p>
-        <p className="text-2xl font-mono font-black text-slate-300">
-          {metrics.frameTime.toFixed(2)}<span className="text-xs text-gray-500 ml-1">ms</span>
-        </p>
-      </div>
-      <div className="bg-black/80 backdrop-blur-xl border border-orange-500/40 px-4 py-3 rounded-xl">
-        <p className="text-gray-400 text-xs uppercase tracking-widest mb-1">Jitter</p>
-        <p className={`text-2xl font-mono font-black ${jitterColor}`}>
-          {metrics.jitter.toFixed(2)}<span className="text-xs text-gray-500 ml-1">ms</span>
-        </p>
-      </div>
-      <div className="bg-black/80 backdrop-blur-xl border border-blue-500/40 px-4 py-3 rounded-xl">
-        <p className="text-gray-400 text-xs uppercase tracking-widest mb-1">Load Time</p>
-        <p className="text-2xl font-mono font-black text-blue-400">
-          {metrics.loadTime.toFixed(1)}<span className="text-xs text-gray-500 ml-1">ms</span>
-        </p>
-      </div>
-    </div>
-  )
-}
-
-// ─── GEOMETRÍA ────────────────────────────────────────────────────────────────
-function InstancedTriangles({ count = 32000 }) {
+// ─── GEOMETRÍA ESTÁTICA ────────────────────────────────────────────────────────
+function InstancedTriangles({ count }: { count: number }) {
   const meshRef = useRef<THREE.InstancedMesh>(null!)
-  // ✅ tempObject estable: no se recrea en cada render de React
   const tempObject = useRef(new THREE.Object3D()).current
 
   useEffect(() => {
@@ -134,23 +189,19 @@ function InstancedTriangles({ count = 32000 }) {
     }
     meshRef.current.instanceMatrix.needsUpdate = true
     if (meshRef.current.instanceColor) meshRef.current.instanceColor.needsUpdate = true
-  }, [count])
-
-  // ✅ SIN useFrame: test estático, sin animación
-  // Mide GPU puro sin overhead de actualización de matrices
+  }, [count, tempObject])
 
   return (
-    // ✅ undefined en lugar de null! para evitar warnings de TypeScript
     <instancedMesh ref={meshRef} args={[undefined, undefined, count]}>
-      {/* ✅ radio 0.2, altura 0.4, 8 segmentos = ~16 triángulos por instancia */}
       <coneGeometry args={[0.2, 0.4, 8]} />
       <meshStandardMaterial />
     </instancedMesh>
   )
 }
 
+// ─── ESCENA PRINCIPAL ────────────────────────────────────────────────────────
 export default function TrianglesStaticTest() {
-  const [count, setCount] = useState(1000)
+  const [count, setCount] = useState(1024000)
   const [metrics, setMetrics] = useState({ jitter: 0, frameTime: 0, loadTime: 0 })
 
   return (
@@ -166,32 +217,19 @@ export default function TrianglesStaticTest() {
           values: [1000, 4000, 16000, 64000, 256000, 1024000],
         }}
       />
-      <PerfMetricsHUD metrics={metrics} />
 
-      <Canvas camera={{ position: [20, 20, 20], fov: 50 }}>
-        <DebugTools title="Triángulos Estáticos" />
+      <Canvas camera={{ position: [0, 60, 0], fov: 50 }}>
+        {/* Inyectamos Perf de forma oculta para garantizar que la telemetría esté activa */}
+        <Perf style={{ display: 'none' }} />
+        
         <MetricsCollector onUpdate={setMetrics} count={count} />
+
 
         <Suspense fallback={null}>
           <ambientLight intensity={1} />
-          <OrbitControls makeDefault />
           <InstancedTriangles count={count} />
         </Suspense>
       </Canvas>
-
-      {/*
-      <div className="absolute bottom-6 left-6 bg-black/70 p-4 rounded-lg border border-cyan-500 text-white text-xs max-w-xs">
-        <h3 className="font-bold text-cyan-400 mb-2">Especificaciones del test</h3>
-        <ul className="space-y-1 text-gray-300">
-          <li>• Instancias: {count.toLocaleString()}</li>
-          <li>• Geometría: cono r=0.2, h=0.4, 8 seg (~16 tris)</li>
-          <li>• Triángulos totales: ~{(count * 16).toLocaleString()}</li>
-          <li>• Draw calls: 1 (InstancedMesh)</li>
-          <li>• Animación: ninguna (GPU puro)</li>
-          <li>• Iluminación: ambientLight × 1</li>
-        </ul>
-      </div>
-      */}
     </main>
   )
 }

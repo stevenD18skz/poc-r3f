@@ -136,7 +136,7 @@ export default function DebugTools({title, entityCount}: {title: string, entityC
             {showStats && <Stats key={statPanel} showPanel={statPanel} />}
             {showPerf && (
                 <Suspense fallback={null}>
-                    <PerfLazy position="bottom-left" />
+                    <PerfLazy position="bottom-left" trackGPU />
                 </Suspense>
             )}
             {showAxes && <primitive object={new THREE.AxesHelper(10)} />}

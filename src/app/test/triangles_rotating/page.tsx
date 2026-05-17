@@ -4,22 +4,15 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { useRef, useEffect, useState, Suspense, useMemo } from 'react'
 import * as THREE from 'three'
 import PerformanceOverlay from '@/components/test/PerformanceOverlay'
-import DebugTools from '@/components/DebugTools'
 import { OrbitControls } from '@react-three/drei'
 import Loader3D from '@/components/ui/Loader3D'
 
 // ─────────────────────────────────────────────
-// PARÁMETROS DEL TEST (deben ser idénticos en Babylon)
-// ─────────────────────────────────────────────
-// Geometría: cono radio 0.2, altura 0.4, 8 segmentos (idéntico al test estático)
-// Instancias: N (1 draw call total)
-// Animación: rotación individual por instancia en CPU (useFrame)
-// Lo que mides: overhead CPU de actualizar N matrices/frame + subida a GPU
-// Comparar con Test Estático: diferencia = costo puro de la animación CPU
+// PARÁMETROS DEL TEST DINÁMICO (R3F)
 // ─────────────────────────────────────────────
 
-// ─── MÉTRICAS ────────────────────────────────────────────────────────────────
-const JITTER_SAMPLE_SIZE = 60
+// ─── MÉTRICAS (Agnósticas a los Hz del monitor) ──────────────────────────────
+const JITTER_SAMPLE_SIZE = 120 // Aumentado para pantallas de >60Hz
 const metricsCalculator = {
   samples: new Float32Array(JITTER_SAMPLE_SIZE),
   index: 0,
@@ -50,76 +43,88 @@ const metricsCalculator = {
 function MetricsCollector({ onUpdate, count }: { onUpdate: (m: any) => void; count: number }) {
   const frameCount = useRef(0)
   const startTime = useRef(performance.now())
+  const lastLogTime = useRef(performance.now())
   const loadTime = useRef(0)
+  const maxFrameTime = useRef(0)
   const lastCount = useRef(count)
   const { gl } = useThree()
 
+  // Resetear métricas si cambia la cantidad de instancias
   if (lastCount.current !== count) {
     startTime.current = performance.now()
+    lastLogTime.current = performance.now()
     lastCount.current = count
     frameCount.current = 0
     loadTime.current = 0
+    maxFrameTime.current = 0
+    metricsCalculator.filled = 0
+    metricsCalculator.index = 0
   }
 
   useFrame((_, delta) => {
+    const deltaMs = delta * 1000
     metricsCalculator.push(delta)
     frameCount.current++
+    
+    // RASTREO: Guardar siempre el fotograma que más haya tardado (Pico de latencia)
+    if (deltaMs > maxFrameTime.current) {
+      maxFrameTime.current = deltaMs
+    }
+
+    const now = performance.now()
+
+    // 1. Calcular el tiempo de carga del primer frame
     if (frameCount.current === 1) {
-      loadTime.current = performance.now() - startTime.current
+      loadTime.current = now - startTime.current
     }
     
+    // 2. Actualizar la UI del HUD (cada 10 frames para no ahogar React)
     if (frameCount.current % 10 === 0) {
       onUpdate({ ...metricsCalculator.compute(), loadTime: loadTime.current })
     }
 
-    if (frameCount.current % 60 === 0) {
+    // 3. Imprimir Log estrictamente cada 10 SEGUNDOS
+    if (now - lastLogTime.current >= 10000) {
       const computed = metricsCalculator.compute()
       const frameTime = computed.frameTime
       const jitter = computed.jitter
       const avgFps = frameTime > 0 ? 1000 / frameTime : 0
       
       const drawCalls = gl.info.render.calls
-      const triangles = gl.info.render.triangles
-      
       const mem = (performance as any).memory
       const ramMB = mem ? (mem.usedJSHeapSize / 1048576).toFixed(1) : 'N/A'
       
-      // Estimaciones (Three.js no da acceso directo a timings de GPU/CPU sin extensiones)
-      const cpuMs = frameTime
-      const gpuMs = frameTime * 0.8 
-      const vramMB = ((triangles * 3 * 12) / 1048576).toFixed(1)
-      
       console.groupCollapsed(
-        `%c[R3F Rotating] ${new Date().toLocaleTimeString()}`,
+        `%c[R3F Test] ${count.toLocaleString()} Instancias - ${new Date().toLocaleTimeString()}`,
         'color:#3b82f6;font-weight:700;font-size:12px',
       )
-      console.log(`%cFPS Promedio     %c${avgFps.toFixed(1)}`, 'color:#94a3b8', 'color:#f1f5f9;font-weight:600')
-      console.log(`%cGPU (ms/frame)   %c${gpuMs.toFixed(2)} ms`, 'color:#94a3b8', 'color:#f1f5f9;font-weight:600')
-      console.log(`%cCPU (ms/frame)   %c${cpuMs.toFixed(2)} ms`, 'color:#94a3b8', 'color:#f1f5f9;font-weight:600')
-      console.log(`%cRAM              %c${ramMB} MB`, 'color:#94a3b8', 'color:#f1f5f9;font-weight:600')
-      console.log(`%cVRAM Estimada    %c${vramMB} MB`, 'color:#94a3b8', 'color:#f1f5f9;font-weight:600')
-      console.log(`%cDraw Calls       %c${drawCalls}`, 'color:#94a3b8', 'color:#f1f5f9;font-weight:600')
-      console.log(`%cTriángulos       %c${triangles.toLocaleString()}`, 'color:#94a3b8', 'color:#f1f5f9;font-weight:600')
+      
+      // Formato minimalista: Métrica + Número
+      console.log(`%cFPS Promedio         %c${avgFps.toFixed(1)}`, 'color:#94a3b8', 'color:#f1f5f9;font-weight:600')
+      console.log(`%cCPU (ms)             %c${frameTime.toFixed(2)} ms`, 'color:#94a3b8', 'color:#f1f5f9;font-weight:600')
+      console.log(`%cRAM                  %c${ramMB} MB`, 'color:#94a3b8', 'color:#f1f5f9;font-weight:600')
+      console.log(`%cPico Latencia        %c${maxFrameTime.current.toFixed(2)} ms`, 'color:#94a3b8', 'color:#f87171;font-weight:600')
+      console.log(`%cFrame Time           %c${frameTime.toFixed(2)} ms`, 'color:#94a3b8', 'color:#f1f5f9;font-weight:600')
+      console.log(`%cJitter               %c${jitter.toFixed(2)} ms`, 'color:#94a3b8', 'color:#f1f5f9;font-weight:600')
+      console.log(`%cLoad Time            %c${loadTime.current.toFixed(1)} ms`, 'color:#94a3b8', 'color:#f1f5f9;font-weight:600')
+      console.log(`%cDraw Calls           %c${drawCalls}`, 'color:#94a3b8', 'color:#f1f5f9;font-weight:600')
 
-      console.log(`%cFrame Time       %c${frameTime.toFixed(2)} ms`, 'color:#94a3b8', 'color:#f1f5f9;font-weight:600')
-      console.log(`%cJitter           %c${jitter.toFixed(2)} ms`, 'color:#94a3b8', 'color:#f1f5f9;font-weight:600')
-      console.log(`%cLoad Time        %c${loadTime.current.toFixed(1)} ms`, 'color:#94a3b8', 'color:#f1f5f9;font-weight:600')
       console.groupEnd()
+
+      // Resetear el temporizador para los próximos 10 segundos
+      lastLogTime.current = now
     }
   })
 
   return null
 }
 
-
-// ─── GEOMETRÍA ────────────────────────────────────────────────────────────────
+// ─── GEOMETRÍA DINÁMICA ────────────────────────────────────────────────────────
 function InstancedRotatingTriangles({ count = 32000 }) {
   const meshRef = useRef<THREE.InstancedMesh>(null!)
-  // ✅ tempObject estable: no se recrea en cada render de React
   const tempObject = useRef(new THREE.Object3D()).current
 
-  // Datos por instancia calculados una sola vez
-  // ✅ phase en [0, 2π]: distribuida uniformemente, no delay*0.15 que crece sin límite
+  // Datos calculados una sola vez (useMemo evita regenerarlos en cada re-render de React)
   const particles = useMemo(() => {
     return Array.from({ length: count }, () => {
       const radius = 10 + Math.random() * 40
@@ -135,7 +140,7 @@ function InstancedRotatingTriangles({ count = 32000 }) {
     })
   }, [count])
 
-  // Setup inicial de posiciones y colores
+  // Setup inicial de matrices y colores
   useEffect(() => {
     if (!meshRef.current) return
     particles.forEach((p, i) => {
@@ -147,10 +152,9 @@ function InstancedRotatingTriangles({ count = 32000 }) {
     })
     meshRef.current.instanceMatrix.needsUpdate = true
     if (meshRef.current.instanceColor) meshRef.current.instanceColor.needsUpdate = true
-  }, [particles])
+  }, [particles, tempObject])
 
-  // Rotación individual en CPU cada frame
-  // ✅ 1 solo useFrame que itera N instancias (no N useFrame registrados)
+  // Rotación en CPU (Cuello de botella a evaluar)
   useFrame((state) => {
     if (!meshRef.current) return
     const t = state.clock.getElapsedTime()
@@ -168,17 +172,16 @@ function InstancedRotatingTriangles({ count = 32000 }) {
   })
 
   return (
-    // ✅ undefined en lugar de null!
     <instancedMesh ref={meshRef} args={[undefined, undefined, count]}>
-      {/* ✅ radio 0.2, altura 0.4, 8 segmentos — idéntico al test estático */}
       <coneGeometry args={[0.2, 0.4, 8]} />
       <meshStandardMaterial />
     </instancedMesh>
   )
 }
 
+// ─── ESCENA PRINCIPAL ────────────────────────────────────────────────────────
 export default function TrianglesRotatingTest() {
-  const [count, setCount] = useState(64000)
+  const [count, setCount] = useState(512000)
   const [metrics, setMetrics] = useState({ jitter: 0, frameTime: 0, loadTime: 0 })
 
   return (
@@ -195,10 +198,8 @@ export default function TrianglesRotatingTest() {
         }}
       />
 
-      {/* ✅ Misma posición de cámara que el test estático para comparación visual justa */}
       <Canvas camera={{ position: [0, 120, 0], fov: 50 }}>
         <MetricsCollector onUpdate={setMetrics} count={count} />
-        <DebugTools title="Triángulos Rotando" />
 
         <Suspense fallback={<Loader3D />}>
           <ambientLight intensity={1} />
