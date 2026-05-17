@@ -72,7 +72,7 @@ function MetricsCollector({ onUpdate, count }: { onUpdate: (m: any) => void; cou
       onUpdate({ ...metricsCalculator.compute(), loadTime: loadTime.current })
     }
 
-    if (frameCount.current % 300 === 0) {
+    if (frameCount.current % 60 === 0) {
       const computed = metricsCalculator.compute()
       const frameTime = computed.frameTime
       const jitter = computed.jitter
@@ -111,35 +111,6 @@ function MetricsCollector({ onUpdate, count }: { onUpdate: (m: any) => void; cou
   return null
 }
 
-function PerfMetricsHUD({ metrics }: { metrics: any }) {
-  const jitterColor =
-    metrics.jitter < 1 ? 'text-emerald-400' :
-    metrics.jitter < 3 ? 'text-yellow-400' :
-    'text-red-400'
-
-  return (
-    <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-2 min-w-[170px]">
-      <div className="bg-black/80 backdrop-blur-xl border border-slate-500/40 px-4 py-3 rounded-xl">
-        <p className="text-gray-400 text-xs uppercase tracking-widest mb-1">Frame Time</p>
-        <p className="text-2xl font-mono font-black text-slate-300">
-          {metrics.frameTime.toFixed(2)}<span className="text-xs text-gray-500 ml-1">ms</span>
-        </p>
-      </div>
-      <div className="bg-black/80 backdrop-blur-xl border border-orange-500/40 px-4 py-3 rounded-xl">
-        <p className="text-gray-400 text-xs uppercase tracking-widest mb-1">Jitter</p>
-        <p className={`text-2xl font-mono font-black ${jitterColor}`}>
-          {metrics.jitter.toFixed(2)}<span className="text-xs text-gray-500 ml-1">ms</span>
-        </p>
-      </div>
-      <div className="bg-black/80 backdrop-blur-xl border border-blue-500/40 px-4 py-3 rounded-xl">
-        <p className="text-gray-400 text-xs uppercase tracking-widest mb-1">Load Time</p>
-        <p className="text-2xl font-mono font-black text-blue-400">
-          {metrics.loadTime.toFixed(1)}<span className="text-xs text-gray-500 ml-1">ms</span>
-        </p>
-      </div>
-    </div>
-  )
-}
 
 // ─── GEOMETRÍA ────────────────────────────────────────────────────────────────
 function InstancedRotatingTriangles({ count = 32000 }) {
@@ -207,7 +178,7 @@ function InstancedRotatingTriangles({ count = 32000 }) {
 }
 
 export default function TrianglesRotatingTest() {
-  const [count, setCount] = useState(512000)
+  const [count, setCount] = useState(64000)
   const [metrics, setMetrics] = useState({ jitter: 0, frameTime: 0, loadTime: 0 })
 
   return (
@@ -227,6 +198,7 @@ export default function TrianglesRotatingTest() {
       {/* ✅ Misma posición de cámara que el test estático para comparación visual justa */}
       <Canvas camera={{ position: [0, 120, 0], fov: 50 }}>
         <MetricsCollector onUpdate={setMetrics} count={count} />
+        <DebugTools title="Triángulos Rotando" />
 
         <Suspense fallback={<Loader3D />}>
           <ambientLight intensity={1} />
