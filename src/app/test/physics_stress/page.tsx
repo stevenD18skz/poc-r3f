@@ -1,108 +1,160 @@
 'use client'
 
-import { Canvas, useFrame } from '@react-three/fiber'
+import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { useState, useMemo, useRef, useCallback, Suspense } from 'react'
 import { Physics, RigidBody, CuboidCollider, RapierRigidBody, useRapier, useBeforePhysicsStep, useAfterPhysicsStep } from '@react-three/rapier'
 import * as THREE from 'three'
+import { Perf, getPerf } from 'r3f-perf'
 import PerformanceOverlay from '@/components/test/PerformanceOverlay'
 import DebugTools from '@/components/DebugTools'
 import Loader3D from '@/components/ui/Loader3D'
 import { OrbitControls } from '@react-three/drei'
 
 // ─────────────────────────────────────────────
-// PARÁMETROS DEL TEST (documentar al comparar con Babylon)
+// PARAMETROS CONFIGURABLES
 // ─────────────────────────────────────────────
-// Motor R3F:    Rapier (Rust/WASM)
-// Motor Babylon: Havok / Cannon.js
-// NOTA: Se comparan motores distintos, no solo frameworks
-// ─────────────────────────────────────────────
-// Escena: bowl cóncavo + rampa central → objetos se acumulan y colisionan densamente
-// Cuerpos: N cajas + N esferas (50/50) → más variedad de colisiones
-// canSleep: false → siempre activos
-// ✅ 1 solo useFrame para todos los respawns (no N callbacks)
-// Variable: cantidad de cuerpos simultáneos
-// Métricas: Sim Step (tiempo WASM puro) + Active Bodies + Jitter
-// ─────────────────────────────────────────────
-
 const SPAWN_HEIGHT = 22
 const KILL_Y = -5
 const BODY_SIZE = 0.6
+const SAMPLE_SIZE = 200 // 2 segundos exactos a una tasa de refresco de 100Hz
 
-// ─────────────────────────────────────────────
-// MÉTRICAS DE FÍSICA
-// Rapier expone world.performanceData con tiempos internos del motor
-// ─────────────────────────────────────────────
-const frameBuffer = new Float32Array(60)
-let bufIdx = 0, bufFilled = 0
+// Mapa global de referencias para evitar colisiones de estado en React
+const rigidBodyMap = new Map<number, RapierRigidBody>()
 
-interface PhysicsMetrics {
-  simStepMs: number     // Tiempo de simulación WASM puro (lo más valioso)
-  activeBodies: number  // Cuerpos activos en la simulación
-  jitter: number        // Varianza del frame time
-  frameBudget: number   // % del presupuesto de 16ms usado
+// Calculador matemático estricto adaptado a alta tasa de refresco (100Hz)
+const deltaCalculator = {
+  samples: new Float32Array(SAMPLE_SIZE),
+  index: 0,
+  filled: 0,
+
+  push(deltaMs: number) {
+    this.samples[this.index] = deltaMs
+    this.index = (this.index + 1) % SAMPLE_SIZE
+    this.filled = Math.min(this.filled + 1, SAMPLE_SIZE)
+  },
+  mean() {
+    if (this.filled < 1) return 0
+    let sum = 0
+    for (let i = 0; i < this.filled; i++) sum += this.samples[i]
+    return sum / this.filled
+  },
+  jitter() {
+    if (this.filled < 2) return 0
+    const m = this.mean()
+    let variance = 0
+    for (let i = 0; i < this.filled; i++) {
+      const diff = this.samples[i] - m
+      variance += diff * diff
+    }
+    return Math.sqrt(variance / this.filled)
+  },
+  reset() {
+    this.index = 0
+    this.filled = 0
+  }
 }
 
-function PhysicsMetricsCollector({ onUpdate }: { onUpdate: (m: PhysicsMetrics) => void }) {
-  const { world } = useRapier()
-  const fc = useRef(0)
+// ─────────────────────────────────────────────
+// CONSOLE METRICS COLLECTOR (OPTIMIZADO PARA 100Hz)
+// ─────────────────────────────────────────────
+function ConsoleMetricsCollector({ count }: { count: number }) {
+  const frameCount = useRef(0)
+  const lastLogTime = useRef(performance.now() - 2000)
+  const lastPeakResetTime = useRef(performance.now())
+  const lastCount = useRef(count)
+  
+  // Medidores de tiempos WASM de Rapier
   const simStart = useRef(0)
-  const simStepMs = useRef(0)
+  const lastSimStepMs = useRef(0)
+  
+  // Trackers de picos de latencia del frame completo
+  const peakFrameTime10s = useRef(0)
 
+  if (lastCount.current !== count) {
+    lastCount.current = count
+    frameCount.current = 0
+    peakFrameTime10s.current = 0
+    deltaCalculator.reset()
+    rigidBodyMap.clear()
+    lastLogTime.current = performance.now() - 2000
+    lastPeakResetTime.current = performance.now()
+  }
+
+  // Capturar el inicio del paso de física en el hilo síncrono de WASM
   useBeforePhysicsStep(() => {
     simStart.current = performance.now()
   })
 
+  // Capturar la finalización del procesamiento del solver de colisiones de Rapier
   useAfterPhysicsStep(() => {
-    simStepMs.current = performance.now() - simStart.current
+    lastSimStepMs.current = performance.now() - simStart.current
   })
 
   useFrame((_, delta) => {
-    const ms = delta * 1000
-    frameBuffer[bufIdx] = ms
-    bufIdx = (bufIdx + 1) % 60
-    bufFilled = Math.min(bufFilled + 1, 60)
-    fc.current++
-    if (fc.current % 10 !== 0) return
+    const now = performance.now()
+    const deltaMs = delta * 1000
+    frameCount.current++
 
-    const n = bufFilled
-    let sum = 0
-    for (let i = 0; i < n; i++) sum += frameBuffer[i]
-    const mean = sum / n
-    let variance = 0
-    for (let i = 0; i < n; i++) { const d = frameBuffer[i] - mean; variance += d * d }
-
-    let activeCount = 0
-    rigidBodyMap.forEach((rb) => {
-      if (rb && typeof rb.isSleeping === 'function' && !rb.isSleeping()) {
-        activeCount++
+    // Estabilización inicial (Warm-up de Jitter)
+    if (frameCount.current > 15) {
+      deltaCalculator.push(deltaMs)
+      
+      // Capturar el frame más lento para la métrica del pico de latencia
+      if (deltaMs > peakFrameTime10s.current) {
+        peakFrameTime10s.current = deltaMs
       }
-    })
+    }
 
-    onUpdate({
-      simStepMs: Math.round(simStepMs.current * 100) / 100,
-      activeBodies: activeCount,
-      jitter: Math.round(Math.sqrt(variance / n) * 100) / 100,
-      frameBudget: Math.round((mean / 16.667) * 1000) / 10,
-    })
+    // Ventana deslizante automática de 10 segundos para limpiar el Pico Máximo
+    if (now - lastPeakResetTime.current >= 10000) {
+      peakFrameTime10s.current = deltaMs
+      lastPeakResetTime.current = now
+    }
+
+    // Reporte por consola cada 2 segundos
+    if (now - lastLogTime.current >= 2000) {
+      const perfState = getPerf ? getPerf() : null
+      const cpuTime = perfState?.log?.cpu ?? 0
+      const meanFrameTime = deltaCalculator.mean()
+      
+      // Frecuencia real basada en hardware (Muestreo directo)
+      const currentFps = meanFrameTime > 0 ? 1000 / meanFrameTime : 0
+      
+      // 🔴 PRESUPUESTO AJUSTADO A 100Hz: Target exacto = 10.0 ms por cuadro
+      const frameBudget = (meanFrameTime / 10.0) * 100 
+      const jitter = deltaCalculator.jitter()
+
+      console.log(
+        `%c[Physics Stress] ${count.toLocaleString()} Cuerpos Cóncavos - Target: 100Hz (10ms)`,
+        'color:#3b82f6;font-weight:bold;font-size:12px'
+      )
+      console.log(`%cEntidades%c ${count}`, 'color:#94a3b8', 'color:#e2e8f0;font-weight:600')
+      console.log(`%cMotor%c Rapier (WASM)`, 'color:#94a3b8', 'color:#e2e8f0;font-weight:600')
+      console.log(`%cFPS%c ${Math.round(currentFps)}`, 'color:#94a3b8', 'color:#e2e8f0;font-weight:600')
+      console.log(`%cCPU (ms)%c ${cpuTime.toFixed(2)} ms`, 'color:#94a3b8', 'color:#38bdf8;font-weight:600')
+      console.log(`%cFrame Time (ms)%c ${meanFrameTime.toFixed(2)} ms`, 'color:#94a3b8', 'color:#e2e8f0;font-weight:600')
+      console.log(`%cFrame Budget (%)%c ${frameBudget.toFixed(1)}%`, 'color:#94a3b8', 'color:#fbbf24;font-weight:600')
+      console.log(`%cJitter (ms)%c ${jitter.toFixed(2)} ms`, 'color:#94a3b8', 'color:#e2e8f0;font-weight:600')
+      console.log(`%cSim Step WASM (ms)%c ${lastSimStepMs.current.toFixed(2)} ms`, 'color:#94a3b8', 'color:#10b981;font-weight:700')
+      console.log(`%cPico Latencia (10s)%c ${peakFrameTime10s.current.toFixed(2)} ms`, 'color:#94a3b8', 'color:#f43f5e;font-weight:600')
+      console.log('--------------------------------------------------')
+
+      lastLogTime.current = now
+    }
   })
 
   return null
 }
 
 // ─────────────────────────────────────────────
-// GESTOR DE CUERPOS FÍSICOS
-// ✅ 1 solo useFrame para N respawns (no N callbacks)
-// Los rigid body refs se registran en un Map global
+// OPTIMIZACIONES DE ESCENA FÍSICA
 // ─────────────────────────────────────────────
-const rigidBodyMap = new Map<number, RapierRigidBody>()
-
-function RespawnManager({ count }: { count: number }) {
+function RespawnManager() {
   useFrame(() => {
     rigidBodyMap.forEach((rb) => {
-      if (!rb || rb.isSleeping()) return
+      if (!rb) return
       const pos = rb.translation()
       if (pos.y < KILL_Y) {
-        // Respawn en posición aleatoria arriba
         rb.setTranslation({
           x: (Math.random() - 0.5) * 8,
           y: SPAWN_HEIGHT,
@@ -124,20 +176,15 @@ function RespawnManager({ count }: { count: number }) {
   return null
 }
 
-// Cuerpo físico individual que se registra en el mapa global
 function PhysicsBody({ id, initialPosition, color, isSphere }: {
   id: number
   initialPosition: [number, number, number]
   color: string
   isSphere: boolean
 }) {
-  const rbRef = useRef<RapierRigidBody>(null!)
-
-  // Registrar/desregistrar en el mapa global
   const refCallback = useCallback((rb: RapierRigidBody | null) => {
     if (rb) rigidBodyMap.set(id, rb)
     else rigidBodyMap.delete(id)
-      ; (rbRef as any).current = rb
   }, [id])
 
   return (
@@ -152,8 +199,8 @@ function PhysicsBody({ id, initialPosition, color, isSphere }: {
       canSleep={false}
     >
       <mesh castShadow>
-        {isSphere
-          ? <sphereGeometry args={[BODY_SIZE * 0.5, 12, 12]} />
+        {isSphere 
+          ? <sphereGeometry args={[BODY_SIZE * 0.5, 12, 12]} /> 
           : <boxGeometry args={[BODY_SIZE, BODY_SIZE, BODY_SIZE]} />
         }
         <meshStandardMaterial color={color} roughness={0.4} metalness={0.2} />
@@ -162,11 +209,6 @@ function PhysicsBody({ id, initialPosition, color, isSphere }: {
   )
 }
 
-// ─────────────────────────────────────────────
-// BOWL: estructura cóncava que acumula cuerpos
-// → Mayor densidad de colisiones entre cuerpos
-// → Más interesante visualmente
-// ─────────────────────────────────────────────
 function Bowl() {
   const SIDES = 8
   const RADIUS = 12
@@ -175,25 +217,18 @@ function Bowl() {
 
   return (
     <RigidBody type="fixed">
-      {/* Suelo del bowl */}
       <mesh receiveShadow position={[0, 0, 0]}>
         <cylinderGeometry args={[RADIUS * 0.6, RADIUS * 0.6, THICKNESS, 32]} />
         <meshStandardMaterial color="#1e293b" roughness={0.8} metalness={0.2} />
       </mesh>
       <CuboidCollider args={[RADIUS * 0.6, THICKNESS / 2, RADIUS * 0.6]} position={[0, 0, 0]} />
 
-      {/* Paredes inclinadas del bowl (octágono) */}
       {Array.from({ length: SIDES }).map((_, i) => {
         const angle = (i / SIDES) * Math.PI * 2
-        const tilt = 0.4 // Inclinación hacia dentro
+        const tilt = 0.4
         return (
           <group key={i} rotation={[0, angle, 0]}>
-            <mesh
-              receiveShadow
-              position={[RADIUS * 0.8, HEIGHT / 2, 0]}
-              rotation={[0, 0, -tilt]}
-              castShadow
-            >
+            <mesh receiveShadow position={[RADIUS * 0.8, HEIGHT / 2, 0]} rotation={[0, 0, -tilt]} castShadow>
               <boxGeometry args={[THICKNESS, HEIGHT, RADIUS * 0.85]} />
               <meshStandardMaterial color="#334155" roughness={0.7} metalness={0.3} />
             </mesh>
@@ -206,7 +241,6 @@ function Bowl() {
         )
       })}
 
-      {/* Rampa central inclinada → deflecta cuerpos hacia las paredes */}
       <mesh position={[0, 2, 0]} rotation={[0.3, 0.4, 0.2]} receiveShadow castShadow>
         <boxGeometry args={[5, 0.3, 5]} />
         <meshStandardMaterial color="#4f46e5" roughness={0.5} metalness={0.4} />
@@ -216,7 +250,7 @@ function Bowl() {
   )
 }
 
-function PhysicsScene({ count, setMetrics }: { count: number, setMetrics: (m: PhysicsMetrics) => void }) {
+function PhysicsScene({ count }: { count: number }) {
   const bodies = useMemo(() => Array.from({ length: count }, (_, i) => ({
     id: i,
     initialPosition: [
@@ -224,14 +258,13 @@ function PhysicsScene({ count, setMetrics }: { count: number, setMetrics: (m: Ph
       SPAWN_HEIGHT + i * 0.25,
       (Math.random() - 0.5) * 8,
     ] as [number, number, number],
-    // Colores: velocidad visual alta → azul frío, baja → naranja cálido
     color: `hsl(${(i / count) * 240 + 20}, 80%, 55%)`,
-    isSphere: i % 2 === 0, // 50% esferas, 50% cajas
+    isSphere: i % 2 === 0,
   })), [count])
 
   return (
     <>
-      <ambientLight intensity={0.5} />
+      <ambientLight intensity={0.75} />
       <directionalLight
         position={[15, 25, 10]}
         intensity={1.2}
@@ -246,8 +279,10 @@ function PhysicsScene({ count, setMetrics }: { count: number, setMetrics: (m: Ph
       <pointLight position={[-8, 5, -8]} intensity={15} color="#f43f5e" />
 
       <Physics gravity={[0, -9.81, 0]} timeStep={1 / 60}>
-        <PhysicsMetricsCollector onUpdate={setMetrics} />
-        <RespawnManager count={count} />
+        {/* Orquestador de métricas específicas nativas y WASM */}
+        <ConsoleMetricsCollector count={count} />
+        
+        <RespawnManager />
 
         {bodies.map((b) => (
           <PhysicsBody
@@ -266,60 +301,10 @@ function PhysicsScene({ count, setMetrics }: { count: number, setMetrics: (m: Ph
 }
 
 // ─────────────────────────────────────────────
-// HUD DE MÉTRICAS
+// COMPONENTE VISTA PRINCIPAL
 // ─────────────────────────────────────────────
-function PhysicsMetricsHUD({ metrics, count }: { metrics: PhysicsMetrics; count: number }) {
-  const simColor = metrics.simStepMs < 2 ? 'text-emerald-400' : metrics.simStepMs < 6 ? 'text-yellow-400' : 'text-red-400'
-  const jitterColor = metrics.jitter < 2 ? 'text-emerald-400' : metrics.jitter < 5 ? 'text-yellow-400' : 'text-red-400'
-  const budgetColor = metrics.frameBudget < 50 ? 'text-emerald-400' : metrics.frameBudget < 85 ? 'text-yellow-400' : 'text-red-400'
-
-  return (
-    <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-2 min-w-[180px]">
-      {/* Sim Step: la métrica más valiosa de este test */}
-      <div className="bg-black/80 backdrop-blur border border-orange-500/40 px-4 py-3 rounded-xl">
-        <p className="text-gray-400 text-xs uppercase tracking-widest mb-1">Sim Step (WASM)</p>
-        <p className={`text-2xl font-mono font-black ${simColor}`}>
-          {metrics.simStepMs.toFixed(2)}
-          <span className="text-xs text-gray-500 ml-1">ms</span>
-        </p>
-        <p className="text-gray-600 text-[10px]">tiempo puro de Rapier</p>
-      </div>
-
-      <div className="bg-black/80 backdrop-blur border border-blue-500/40 px-4 py-3 rounded-xl">
-        <p className="text-gray-400 text-xs uppercase tracking-widest mb-1">Cuerpos Activos</p>
-        <p className="text-2xl font-mono font-black text-blue-400">
-          {metrics.activeBodies}
-          <span className="text-xs text-gray-500 ml-1">/ {count}</span>
-        </p>
-        <p className="text-gray-600 text-[10px]">canSleep: false</p>
-      </div>
-
-      <div className="bg-black/80 backdrop-blur border border-yellow-500/40 px-4 py-3 rounded-xl">
-        <p className="text-gray-400 text-xs uppercase tracking-widest mb-1">Jitter</p>
-        <p className={`text-2xl font-mono font-black ${jitterColor}`}>
-          {metrics.jitter.toFixed(2)}
-          <span className="text-xs text-gray-500 ml-1">ms</span>
-        </p>
-        <p className="text-gray-600 text-[10px]">varianza frame time</p>
-      </div>
-
-      <div className="bg-black/80 backdrop-blur border border-purple-500/40 px-4 py-3 rounded-xl">
-        <p className="text-gray-400 text-xs uppercase tracking-widest mb-1">Frame Budget</p>
-        <p className={`text-2xl font-mono font-black ${budgetColor}`}>
-          {metrics.frameBudget.toFixed(1)}
-          <span className="text-xs text-gray-500 ml-1">%</span>
-        </p>
-        <p className="text-gray-600 text-[10px]">de 16.67ms (60fps)</p>
-      </div>
-    </div>
-  )
-}
-
 export default function PhysicsStressTest() {
-  const [count, setCount] = useState(1024)
-  const [metrics, setMetrics] = useState<PhysicsMetrics>({
-    simStepMs: 0, activeBodies: 0, jitter: 0, frameBudget: 0,
-  })
+  const [count, setCount] = useState(2048)
 
   return (
     <main className="relative w-full h-screen bg-[#050505] overflow-hidden">
@@ -331,30 +316,14 @@ export default function PhysicsStressTest() {
         inputConfig={{ unit: 'normal', type: 'values', values: [16, 64, 128, 512, 1024, 2048] }}
       />
 
-      <PhysicsMetricsHUD metrics={metrics} count={count} />
-
-      <Canvas shadows camera={{ position: [18, 18, 18], fov: 50 }}>
-        <DebugTools title="Estrés de Física (Rapier)" entityCount={count} />
+      <Canvas shadows camera={{ position: [18, 18, 18], fov: 50 }} gl={{ antialias: false, powerPreference: 'high-performance' }}>
+        {/* Tracking oculto de consumo de CPU de R3F */}
+        <Perf minimal style={{ display: 'none' }} />
+        
         <Suspense fallback={<Loader3D />}>
-          <OrbitControls makeDefault target={[0, 4, 0]} />
-          <PhysicsScene count={count} setMetrics={setMetrics} />
+          <PhysicsScene count={count} />
         </Suspense>
       </Canvas>
-
-      {/* 
-      <div className="absolute bottom-6 left-6 bg-black/70 p-4 rounded-lg border border-orange-500 text-white text-xs max-w-xs">
-        <h3 className="font-bold text-orange-400 mb-2">Especificaciones del test</h3>
-        <ul className="space-y-1 text-gray-300">
-          <li>• Cuerpos: {count} ({Math.ceil(count/2)} esferas + {Math.floor(count/2)} cajas)</li>
-          <li>• canSleep: false · timeStep: 1/60</li>
-          <li>• Escena: bowl cóncavo + rampa → colisiones densas</li>
-          <li>• Respawn: 1 useFrame (no {count})</li>
-          <li>• Motor R3F: Rapier (Rust/WASM)</li>
-          <li>• Motor Babylon: Havok / Cannon.js</li>
-          <li>• ⚠️ Motores distintos</li>
-        </ul>
-      </div>
-      */}
     </main>
   )
 }
