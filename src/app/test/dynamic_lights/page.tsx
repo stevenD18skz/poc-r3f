@@ -4,117 +4,164 @@ import { Canvas, useFrame } from '@react-three/fiber'
 import { useRef, useState, useMemo, Suspense, useEffect } from 'react'
 import * as THREE from 'three'
 import PerformanceOverlay from '@/components/test/PerformanceOverlay'
-import DebugTools from '@/components/DebugTools'
 import Loader3D from '@/components/ui/Loader3D'
 import { OrbitControls } from '@react-three/drei'
+import { useThree } from '@react-three/fiber'
 
-//upsate 25-04-2026-12:48
+// Importamos la librería de rendimiento y su hook de telemetría directo
+import { Perf, getPerf } from 'r3f-perf'
 
-const JITTER_SAMPLE_SIZE = 60
-const metricsCalculator = {
+// ─── CONFIGURACIÓN DE MUESTREO SÓLIDO ─────────────────────────────────────────
+const JITTER_SAMPLE_SIZE = 120
+
+// Dos calculadores separados: uno para delta real, uno para cpu
+const deltaCalculator = {
   samples: new Float32Array(JITTER_SAMPLE_SIZE),
   index: 0,
   filled: 0,
-  push(delta: number) {
-    const ms = delta * 1000
-    this.samples[this.index] = ms
+  push(deltaMs: number) {
+    this.samples[this.index] = deltaMs
     this.index = (this.index + 1) % JITTER_SAMPLE_SIZE
     this.filled = Math.min(this.filled + 1, JITTER_SAMPLE_SIZE)
   },
-  compute() {
-    if (this.filled < 2) return { jitter: 0, frameTime: 0 }
+  mean() {
+    if (this.filled < 1) return 0
     let sum = 0
     for (let i = 0; i < this.filled; i++) sum += this.samples[i]
-    const mean = sum / this.filled
+    return sum / this.filled
+  },
+  // Jitter = desviación estándar de los deltas reales entre frames
+  jitter() {
+    if (this.filled < 2) return 0
+    const m = this.mean()
     let variance = 0
     for (let i = 0; i < this.filled; i++) {
-      const diff = this.samples[i] - mean
+      const diff = this.samples[i] - m
       variance += diff * diff
     }
-    return {
-      jitter: Math.round(Math.sqrt(variance / this.filled) * 100) / 100,
-      frameTime: Math.round(mean * 100) / 100,
-    }
+    return Math.round(Math.sqrt(variance / this.filled) * 100) / 100
   },
+  // P95 de los deltas para detectar spikes
+  p95() {
+    if (this.filled < 2) return 0
+    const sorted = this.samples.slice(0, this.filled).sort()
+    return sorted[Math.floor(this.filled * 0.95)]
+  },
+  reset() {
+    this.index = 0
+    this.filled = 0
+  }
 }
 
-function MetricsCollector({ onUpdate }: { onUpdate: (m: any) => void }) {
+function MetricsCollector({ onUpdate, count }: { onUpdate: (m: any) => void; count: number }) {
   const frameCount = useRef(0)
+  const startTime = useRef(performance.now())
+  const lastLogTime = useRef(performance.now())
+  const loadTime = useRef(0)
+  // maxFrameTime ahora trackea el pico del período actual (últimos 10s)
+  const periodMaxFrameTime = useRef(0)
+  const lastCount = useRef(count)
+  const { gl } = useThree()
+
+  if (lastCount.current !== count) {
+    startTime.current = performance.now()
+    lastLogTime.current = performance.now()
+    lastCount.current = count
+    frameCount.current = 0
+    loadTime.current = 0
+    periodMaxFrameTime.current = 0
+    deltaCalculator.reset()
+  }
 
   useFrame((_, delta) => {
-    metricsCalculator.push(delta)
     frameCount.current++
+    const now = performance.now()
+    // Delta real entre frames (lo que importa para jitter y frame time)
+    const deltaMs = delta * 1000
 
+    // Alimentar el calculador con deltas reales, no con CPU time
+    deltaCalculator.push(deltaMs)
+
+    // Pico del período actual
+    if (deltaMs > periodMaxFrameTime.current) {
+      periodMaxFrameTime.current = deltaMs
+    }
+
+    if (frameCount.current === 1) {
+      loadTime.current = now - startTime.current
+    }
+
+    const perfState = getPerf ? getPerf() : null
+    const logData = perfState?.log
+
+    // HUD: actualizar cada 10 frames
     if (frameCount.current % 10 === 0) {
-      onUpdate(metricsCalculator.compute())
+      onUpdate({
+        // Frame time = media de los deltas reales entre frames
+        frameTime: Math.round(deltaCalculator.mean() * 100) / 100,
+        // Jitter = std dev de esos mismos deltas
+        jitter: deltaCalculator.jitter(),
+        loadTime: loadTime.current,
+        // CPU time de r3f-perf, reportado separado y con su nombre correcto
+        cpuTime: logData?.cpu ?? 0,
+      })
+    }
+
+    // Log cada 10 segundos
+    if (now - lastLogTime.current >= 10000) {
+      const perf = getPerf ? getPerf() : null
+      const data = perf?.log || { fps: 0, cpu: 0, mem: 0 }
+
+      const frameTimeMean = deltaCalculator.mean()
+      const avgFps = frameTimeMean > 0 ? 1000 / frameTimeMean : 0
+      const jitter = deltaCalculator.jitter()
+      const p95 = deltaCalculator.p95()
+
+      const drawCalls = gl.info.render.calls
+      const triangles = gl.info.render.triangles
+
+      // VRAM: estimación honesta con los buffers que Three.js sí reporta
+      // Posiciones: triangles * 3 verts * 12 bytes (3 floats)
+      // Normales: mismo tamaño que posiciones
+      // UVs: triangles * 3 verts * 8 bytes (2 floats)
+      // Instance matrices: count * 64 bytes (mat4 de floats)
+      // Instance colors: count * 12 bytes (vec3 de floats)
+      const posBytes = triangles * 3 * 12
+      const normalBytes = posBytes
+      const uvBytes = triangles * 3 * 8
+      const matrixBytes = count * 64
+      const colorBytes = count * 12
+      const totalBytes = posBytes + normalBytes + uvBytes + matrixBytes + colorBytes
+      const vramMB = (totalBytes / 1048576).toFixed(2)
+
+      const ramMB = data.mem?.toFixed(1) ?? 'N/A'
+
+      console.log(
+        `%c[R3F Static] ${count.toLocaleString()} Instancias - ${new Date().toLocaleTimeString()}`,
+        'color:#3b82f6;font-weight:700;font-size:12px',
+      )
+      console.log(`%cFPS Promedio         %c${avgFps.toFixed(1)}`, 'color:#94a3b8', 'color:#f1f5f9;font-weight:600')
+      console.log(`%cRAM                  %c${ramMB} MB`, 'color:#94a3b8', 'color:#f1f5f9;font-weight:600')
+      console.log(`%cVRAM Estimada        %c${vramMB} MB (geom+inst)`, 'color:#94a3b8', 'color:#f1f5f9;font-weight:600')
+      // CPU time de r3f-perf reportado con su nombre exacto, separado de frame time
+      console.log(`%cCPU r3f-perf (ms)    %c${data.cpu.toFixed(2)} ms`, 'color:#94a3b8', 'color:#60a5fa;font-weight:600')
+      console.log(`%cFrame Time (media)   %c${frameTimeMean.toFixed(2)} ms`, 'color:#94a3b8', 'color:#f1f5f9;font-weight:600')
+      console.log(`%cFrame Time (P95)     %c${p95.toFixed(2)} ms`, 'color:#94a3b8', 'color:#fbbf24;font-weight:600')
+      console.log(`%cJitter               %c${jitter.toFixed(2)} ms`, 'color:#94a3b8', 'color:#f1f5f9;font-weight:600')
+      console.log(`%cLoad Time            %c${loadTime.current.toFixed(1)} ms`, 'color:#94a3b8', 'color:#f1f5f9;font-weight:600')
+      console.log(`%cDraw Calls           %c${drawCalls}`, 'color:#94a3b8', 'color:#f1f5f9;font-weight:600')
+      // Pico del período actual (se resetea en cada log)
+      console.log(`%cPico Latencia (10s)  %c${periodMaxFrameTime.current.toFixed(2)} ms`, 'color:#94a3b8', 'color:#f87171;font-weight:600')
+      // console.groupEnd()
+
+      // Reset del pico al iniciar nuevo período
+      periodMaxFrameTime.current = 0
+      lastLogTime.current = now
     }
   })
 
   return null
 }
-
-function DynamicLightsHUD({ metrics, count }: { metrics: any, count: number }) {
-  const stats = useRef({ ftSum: 0, jSum: 0, samples: 0 })
-
-  useEffect(() => {
-    stats.current.ftSum += metrics.frameTime
-    stats.current.jSum += metrics.jitter
-    stats.current.samples++
-  }, [metrics])
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      if (stats.current.samples > 0) {
-        const n = stats.current.samples
-        const avgFT = stats.current.ftSum / n
-        const avgJ = stats.current.jSum / n
-        
-        console.log(
-          `%c[5s Avg - Dynamic Lights] FT: ${avgFT.toFixed(2)}ms | Scripting Time: ~0.5ms | Shader Complexity: ${count} Luces | Pixel Fill Rate: ${avgFT.toFixed(2)}ms | Jitter: ${avgJ.toFixed(2)}ms`,
-          'color: #facc15; font-weight: bold;'
-        )
-        
-        stats.current.ftSum = 0
-        stats.current.jSum = 0
-        stats.current.samples = 0
-      }
-    }, 5000)
-    return () => clearInterval(interval)
-  }, [count])
-
-  const jitterColor = metrics.jitter < 1 ? 'text-emerald-400' : metrics.jitter < 3 ? 'text-yellow-400' : 'text-red-400'
-
-  return (
-    <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-2 min-w-[190px]">
-      <div className="bg-black/80 backdrop-blur-xl border border-slate-500/40 px-4 py-3 rounded-xl">
-        <p className="text-gray-400 text-xs uppercase tracking-widest mb-1">Frame Time</p>
-        <p className="text-2xl font-mono font-black text-slate-300">
-          {metrics.frameTime.toFixed(2)}<span className="text-xs text-gray-500 ml-1">ms</span>
-        </p>
-      </div>
-      <div className="bg-black/80 backdrop-blur-xl border border-yellow-500/40 px-4 py-3 rounded-xl">
-        <p className="text-gray-400 text-xs uppercase tracking-widest mb-1">Shader Complexity</p>
-        <p className="text-2xl font-mono font-black text-yellow-400">
-          {count}<span className="text-xs text-gray-500 ml-1">Luces</span>
-        </p>
-      </div>
-      <div className="bg-black/80 backdrop-blur-xl border border-blue-500/40 px-4 py-3 rounded-xl">
-        <p className="text-gray-400 text-xs uppercase tracking-widest mb-1">Pixel Fill Rate (GPU)</p>
-        <p className="text-2xl font-mono font-black text-blue-400">
-          ~{metrics.frameTime.toFixed(2)}<span className="text-xs text-gray-500 ml-1">ms</span>
-        </p>
-      </div>
-      <div className="bg-black/80 backdrop-blur-xl border border-yellow-500/40 px-4 py-3 rounded-xl">
-        <p className="text-gray-400 text-xs uppercase tracking-widest mb-1">Jitter</p>
-        <p className={`text-2xl font-mono font-black ${jitterColor}`}>
-          {metrics.jitter.toFixed(2)}<span className="text-xs text-gray-500 ml-1">ms</span>
-        </p>
-      </div>
-      
-    </div>
-  )
-}
-
 
 // ─────────────────────────────────────────────
 // PARÁMETROS DEL TEST (deben ser idénticos en Babylon)
@@ -466,8 +513,8 @@ function LightingScene({ lightCount, lightType }: { lightCount: number; lightTyp
 }
 
 export default function DynamicLightsTest() {
-  const [count, setCount] = useState(1)
-  const [selectedLightType, setSelectedLightType] = useState<string>('PointLight')
+  const [count, setCount] = useState(320)
+  const [selectedLightType, setSelectedLightType] = useState<string>('HemisphereLight')
   const [metrics, setMetrics] = useState({ jitter: 0, frameTime: 0 })
 
   // Opciones dinámicas: el valor refleja la cantidad activa del tipo seleccionado
@@ -494,32 +541,30 @@ export default function DynamicLightsTest() {
         input={true}
         count={count}
         setCount={setCount}
-        inputConfig={{
-          unit: 'normal',
-          type: 'values',
-          values: LIGHT_RANGES[selectedLightType],
-        }}
-        selectOptions={selectOptions}
-        selectedOption={selectedLightType}
-        onSelectChange={handleLightTypeChange}
       />
-      <DynamicLightsHUD metrics={metrics} count={count} />
+      
 
       <Canvas
-        camera={{ position: [0, 15, 25], fov: 50 }}
+        camera={{ position: [0, 30, 0], fov: 50 }}
         shadows
       >
-        <DebugTools title="Iluminación Dinámica" entityCount={count} />
 
         <Suspense fallback={<Loader3D />}>
-          <MetricsCollector onUpdate={setMetrics} />
-          <OrbitControls
-            makeDefault
-            maxPolarAngle={Math.PI / 2 - 0.05}
-          />
+          <MetricsCollector onUpdate={setMetrics} count={count} />
+          <Perf style={{ display: 'none' }} />
           <LightingScene lightCount={count} lightType={selectedLightType} />
         </Suspense>
       </Canvas>
     </main>
   )
 }
+
+/*
+const LIGHT_TYPE_OPTIONS: Record<string, number> = {
+  PointLight: 0,
+  SpotLight: 0,
+  DirectionalLight: 0,
+  HemisphereLight: 0,
+}
+
+*/

@@ -7,85 +7,164 @@ import PerformanceOverlay from '@/components/test/PerformanceOverlay'
 import DebugTools from '@/components/DebugTools'
 import Loader3D from '@/components/ui/Loader3D'
 import { OrbitControls } from '@react-three/drei'
+import { useThree } from '@react-three/fiber'
 
-const JITTER_SAMPLE_SIZE = 60
-const metricsCalculator = {
+// Importamos la librería de rendimiento y su hook de telemetría directo
+import { Perf, getPerf } from 'r3f-perf'
+
+// ─── CONFIGURACIÓN DE MUESTREO SÓLIDO ─────────────────────────────────────────
+const JITTER_SAMPLE_SIZE = 120
+
+// Dos calculadores separados: uno para delta real, uno para cpu
+const deltaCalculator = {
   samples: new Float32Array(JITTER_SAMPLE_SIZE),
   index: 0,
   filled: 0,
-  push(delta: number) {
-    const ms = delta * 1000
-    this.samples[this.index] = ms
+  push(deltaMs: number) {
+    this.samples[this.index] = deltaMs
     this.index = (this.index + 1) % JITTER_SAMPLE_SIZE
     this.filled = Math.min(this.filled + 1, JITTER_SAMPLE_SIZE)
   },
-  compute() {
-    if (this.filled < 2) return { jitter: 0, frameTime: 0 }
+  mean() {
+    if (this.filled < 1) return 0
     let sum = 0
     for (let i = 0; i < this.filled; i++) sum += this.samples[i]
-    const mean = sum / this.filled
+    return sum / this.filled
+  },
+  // Jitter = desviación estándar de los deltas reales entre frames
+  jitter() {
+    if (this.filled < 2) return 0
+    const m = this.mean()
     let variance = 0
     for (let i = 0; i < this.filled; i++) {
-      const diff = this.samples[i] - mean
+      const diff = this.samples[i] - m
       variance += diff * diff
     }
-    return {
-      jitter: Math.round(Math.sqrt(variance / this.filled) * 100) / 100,
-      frameTime: Math.round(mean * 100) / 100,
-    }
+    return Math.round(Math.sqrt(variance / this.filled) * 100) / 100
   },
+  // P95 de los deltas para detectar spikes
+  p95() {
+    if (this.filled < 2) return 0
+    const sorted = this.samples.slice(0, this.filled).sort()
+    return sorted[Math.floor(this.filled * 0.95)]
+  },
+  reset() {
+    this.index = 0
+    this.filled = 0
+  }
 }
 
-function MetricsCollector({ onUpdate }: { onUpdate: (m: any) => void }) {
+function MetricsCollector({ onUpdate, count }: { onUpdate: (m: any) => void; count: number }) {
   const frameCount = useRef(0)
+  const startTime = useRef(performance.now())
+  const lastLogTime = useRef(performance.now())
+  const loadTime = useRef(0)
+  // maxFrameTime ahora trackea el pico del período actual (últimos 10s)
+  const periodMaxFrameTime = useRef(0)
+  const lastCount = useRef(count)
+  const { gl } = useThree()
+
+  if (lastCount.current !== count) {
+    startTime.current = performance.now()
+    lastLogTime.current = performance.now()
+    lastCount.current = count
+    frameCount.current = 0
+    loadTime.current = 0
+    periodMaxFrameTime.current = 0
+    deltaCalculator.reset()
+  }
 
   useFrame((_, delta) => {
-    metricsCalculator.push(delta)
     frameCount.current++
+    const now = performance.now()
+    // Delta real entre frames (lo que importa para jitter y frame time)
+    const deltaMs = delta * 1000
 
+    // Alimentar el calculador con deltas reales, no con CPU time
+    deltaCalculator.push(deltaMs)
+
+    // Pico del período actual
+    if (deltaMs > periodMaxFrameTime.current) {
+      periodMaxFrameTime.current = deltaMs
+    }
+
+    if (frameCount.current === 1) {
+      loadTime.current = now - startTime.current
+    }
+
+    const perfState = getPerf ? getPerf() : null
+    const logData = perfState?.log
+
+    // HUD: actualizar cada 10 frames
     if (frameCount.current % 10 === 0) {
-      onUpdate(metricsCalculator.compute())
+      onUpdate({
+        // Frame time = media de los deltas reales entre frames
+        frameTime: Math.round(deltaCalculator.mean() * 100) / 100,
+        // Jitter = std dev de esos mismos deltas
+        jitter: deltaCalculator.jitter(),
+        loadTime: loadTime.current,
+        // CPU time de r3f-perf, reportado separado y con su nombre correcto
+        cpuTime: logData?.cpu ?? 0,
+      })
+    }
+
+    // Log cada 10 segundos
+    if (now - lastLogTime.current >= 10000) {
+      const perf = getPerf ? getPerf() : null
+      const data = perf?.log || { fps: 0, cpu: 0, mem: 0 }
+
+      const frameTimeMean = deltaCalculator.mean()
+      const avgFps = frameTimeMean > 0 ? 1000 / frameTimeMean : 0
+      const jitter = deltaCalculator.jitter()
+      const p95 = deltaCalculator.p95()
+
+      const drawCalls = gl.info.render.calls
+      const triangles = gl.info.render.triangles
+
+      // VRAM: estimación honesta con los buffers que Three.js sí reporta
+      // Posiciones: triangles * 3 verts * 12 bytes (3 floats)
+      // Normales: mismo tamaño que posiciones
+      // UVs: triangles * 3 verts * 8 bytes (2 floats)
+      // Instance matrices: count * 64 bytes (mat4 de floats)
+      // Instance colors: count * 12 bytes (vec3 de floats)
+      const posBytes = triangles * 3 * 12
+      const normalBytes = posBytes
+      const uvBytes = triangles * 3 * 8
+      const matrixBytes = count * 64
+      const colorBytes = count * 12
+      const totalBytes = posBytes + normalBytes + uvBytes + matrixBytes + colorBytes
+      const vramMB = (totalBytes / 1048576).toFixed(2)
+
+      const ramMB = data.mem?.toFixed(1) ?? 'N/A'
+
+      console.log(
+        `%c[R3F Static] ${count.toLocaleString()} Instancias - ${new Date().toLocaleTimeString()}`,
+        'color:#3b82f6;font-weight:700;font-size:12px',
+      )
+      console.log(`%cFPS Promedio         %c${avgFps.toFixed(1)}`, 'color:#94a3b8', 'color:#f1f5f9;font-weight:600')
+      console.log(`%cRAM                  %c${ramMB} MB`, 'color:#94a3b8', 'color:#f1f5f9;font-weight:600')
+      console.log(`%cVRAM Estimada        %c${vramMB} MB (geom+inst)`, 'color:#94a3b8', 'color:#f1f5f9;font-weight:600')
+      // CPU time de r3f-perf reportado con su nombre exacto, separado de frame time
+      console.log(`%cCPU r3f-perf (ms)    %c${data.cpu.toFixed(2)} ms`, 'color:#94a3b8', 'color:#60a5fa;font-weight:600')
+      console.log(`%cFrame Time (media)   %c${frameTimeMean.toFixed(2)} ms`, 'color:#94a3b8', 'color:#f1f5f9;font-weight:600')
+      console.log(`%cFrame Time (P95)     %c${p95.toFixed(2)} ms`, 'color:#94a3b8', 'color:#fbbf24;font-weight:600')
+      console.log(`%cJitter               %c${jitter.toFixed(2)} ms`, 'color:#94a3b8', 'color:#f1f5f9;font-weight:600')
+      console.log(`%cLoad Time            %c${loadTime.current.toFixed(1)} ms`, 'color:#94a3b8', 'color:#f1f5f9;font-weight:600')
+      console.log(`%cDraw Calls           %c${drawCalls}`, 'color:#94a3b8', 'color:#f1f5f9;font-weight:600')
+      // Pico del período actual (se resetea en cada log)
+      console.log(`%cPico Latencia (10s)  %c${periodMaxFrameTime.current.toFixed(2)} ms`, 'color:#94a3b8', 'color:#f87171;font-weight:600')
+      // console.groupEnd()
+
+      // Reset del pico al iniciar nuevo período
+      periodMaxFrameTime.current = 0
+      lastLogTime.current = now
     }
   })
 
   return null
 }
 
-function ShadowStressHUD({ metrics, lightCount }: { metrics: any, lightCount: number }) {
 
-  const jitterColor = metrics.jitter < 1 ? 'text-emerald-400' : metrics.jitter < 3 ? 'text-yellow-400' : 'text-red-400'
-  const renderPasses = 1 + lightCount
-  const vramMB = (lightCount * 512 * 512 * 4 / 1048576).toFixed(1)
-
-  return (
-    <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-2 min-w-[190px]">
-      <div className="bg-black/80 backdrop-blur-xl border border-slate-500/40 px-4 py-3 rounded-xl">
-        <p className="text-gray-400 text-xs uppercase tracking-widest mb-1">Frame Time</p>
-        <p className="text-2xl font-mono font-black text-slate-300">
-          {metrics.frameTime.toFixed(2)}<span className="text-xs text-gray-500 ml-1">ms</span>
-        </p>
-      </div>
-      <div className="bg-black/80 backdrop-blur-xl border border-orange-500/40 px-4 py-3 rounded-xl">
-        <p className="text-gray-400 text-xs uppercase tracking-widest mb-1">Shadow Update Jitter</p>
-        <p className={`text-2xl font-mono font-black ${jitterColor}`}>
-          {metrics.jitter.toFixed(2)}<span className="text-xs text-gray-500 ml-1">ms</span>
-        </p>
-      </div>
-      <div className="bg-black/80 backdrop-blur-xl border border-purple-500/40 px-4 py-3 rounded-xl">
-        <p className="text-gray-400 text-xs uppercase tracking-widest mb-1">Render Passes / DC Mult</p>
-        <p className="text-2xl font-mono font-black text-purple-400">
-          {renderPasses}<span className="text-xs text-gray-500 ml-1">x</span>
-        </p>
-      </div>
-      <div className="bg-black/80 backdrop-blur-xl border border-blue-500/40 px-4 py-3 rounded-xl">
-        <p className="text-gray-400 text-xs uppercase tracking-widest mb-1">Shadow Map VRAM</p>
-        <p className="text-2xl font-mono font-black text-blue-400">
-          {vramMB}<span className="text-xs text-gray-500 ml-1">MB</span>
-        </p>
-      </div>
-    </div>
-  )
-}
 
 
 // ─────────────────────────────────────────────
@@ -181,7 +260,7 @@ function Arena() {
   return (
     <group>
       {/* Suelo */}
-      <mesh  position={[0, 0, 0]} receiveShadow castShadow>
+      <mesh position={[0, 0, 0]} receiveShadow castShadow>
         <boxGeometry args={[ARENA.w, WALL_THICKNESS, ARENA.d]} />
         <meshStandardMaterial color="#444" roughness={1} metalness={0.1} />
       </mesh>
@@ -302,14 +381,15 @@ export default function ShadowsStressTest() {
 
   return (
     <main className="relative w-full h-screen bg-[#050505] overflow-hidden">
-      <ShadowStressHUD metrics={metrics} lightCount={lightCount} />
-      <Canvas shadows camera={{ position: [0, 60, 0], fov: 60 }} dpr={[1, 2]}>
-        <MetricsCollector onUpdate={setMetrics} />
-        <DebugTools title="Estrés de Sombras (Arena)" entityCount={count} />
+
+      <Canvas shadows camera={{ position: [0, 70, 0], fov: 50 }} dpr={[1, 2]}>
+        <MetricsCollector onUpdate={setMetrics} count={count} />
 
         <Suspense fallback={<Loader3D />}>
-          <OrbitControls makeDefault />
+        
           <ShadowScene count={count} lightCount={lightCount} isStatic={isStatic} />
+          <Perf style={{ display: 'none' }} />
+
         </Suspense>
       </Canvas>
 
@@ -324,33 +404,7 @@ export default function ShadowsStressTest() {
           values: [64, 256, 1024, 4096, 16384],
         }}
       >
-        <div className="bg-white/5 px-6 py-3 border-t border-white/10 flex flex-col gap-4 rounded-3xl mt-4">
-          <div className="flex justify-between items-center mb-1">
-            <label className="text-[12px] uppercase tracking-[0.15em] font-black text-white/50">Luces</label>
-            <span className="text-[16px] font-mono text-yellow-400 font-bold bg-yellow-500/15 px-3 py-1 rounded-full border border-yellow-500/30 shadow-inner">
-              {lightCount} <span className="text-[8px] opacity-70 ml-1">LIT</span>
-            </span>
-          </div>
-          
-          <div className="relative h-6 flex items-center">
-            <input 
-              type="range" 
-              min="1" 
-              max="2" 
-              step="1" 
-              className="w-full accent-yellow-500 cursor-pointer h-1 bg-white/10 rounded-full appearance-none hover:bg-white/20 transition-colors"
-              value={lightCount}
-              onChange={(e) => setLightCount(Number(e.target.value))}
-            />
-          </div>
 
-          <div className="flex justify-between items-center mt-2 group cursor-pointer" onClick={() => setIsStatic(!isStatic)}>
-            <label className="text-[12px] uppercase tracking-[0.15em] font-black text-white/50 cursor-pointer">Movimiento</label>
-            <div className={`w-12 h-6 rounded-full p-1 transition-all duration-300 ${isStatic ? 'bg-white/10' : 'bg-green-500/40'}`}>
-              <div className={`w-4 h-4 rounded-full bg-white transition-all duration-300 ${isStatic ? 'translate-x-0 opacity-40' : 'translate-x-6 shadow-[0_0_10px_white]'}`} />
-            </div>
-          </div>
-        </div>
       </PerformanceOverlay>
     </main>
   )

@@ -7,7 +7,6 @@ import PerformanceOverlay from '@/components/test/PerformanceOverlay'
 import { OrbitControls } from '@react-three/drei'
 // Importamos la librería de rendimiento y su hook de telemetría directo
 import { Perf, getPerf } from 'r3f-perf'
-import DebugTool from '@/components/DebugTools'
 
 // ─── CONFIGURACIÓN DE MUESTREO SÓLIDO ─────────────────────────────────────────
 const JITTER_SAMPLE_SIZE = 120
