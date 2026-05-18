@@ -1,72 +1,130 @@
 'use client'
 
-import { Canvas, useFrame } from '@react-three/fiber'
-import { useState, useMemo, useRef, useCallback, Suspense } from 'react'
+import { Canvas, useFrame, useThree } from '@react-three/fiber'
+import { useState, useMemo, useRef, Suspense } from 'react'
 import * as THREE from 'three'
+import { Perf, getPerf } from 'r3f-perf'
 import PerformanceOverlay from '@/components/test/PerformanceOverlay'
 import DebugTools from '@/components/DebugTools'
 import Loader3D from '@/components/ui/Loader3D'
 import { OrbitControls, Environment, MeshTransmissionMaterial } from '@react-three/drei'
+import { getVRAMUsage } from '@/utils/vram' // ✅ Reintegrado de tu entorno
 
 // ─────────────────────────────────────────────
-// PARÁMETROS DEL TEST (deben ser idénticos en Babylon)
+// PARÁMETROS DEL TEST
 // ─────────────────────────────────────────────
-// Geometría: alternancia torusKnot / sphere (pre-calculadas, sin GC)
-// Materiales: 3 tipos PBR - Transmission / Metal / Clearcoat+Sheen
-// Distribución: i % 3 → equitativa, no aleatoria (reproducible)
-// Sombras: OFF → aislar costo de shader/material
-// Luces: solo Environment HDRI → necesario para evaluar PBR correctamente
-// Lo que mides: costo de compilar y ejecutar N shader variants complejos
-// ─────────────────────────────────────────────
-
-// ✅ Pre-calculadas: no se recrean en cada render
 const torusKnotGeom = new THREE.TorusKnotGeometry(1, 0.3, 128, 32)
 const sphereGeom = new THREE.SphereGeometry(1, 64, 64)
 
-const SHADER_TYPES = ['Transmission', 'Metal PBR', 'Clearcoat+Sheen'] as const
-type ShaderType = typeof SHADER_TYPES[number]
-
 // ─────────────────────────────────────────────
-// MÉTRICAS
+// CALCULADOR MATEMÁTICO (STEADY STATE)
 // ─────────────────────────────────────────────
-const frameBuffer = new Float32Array(60)
-let bufIdx = 0, bufFilled = 0
+const SAMPLE_SIZE = 120
 
-interface MaterialMetrics {
-  jitter: number
-  frameBudget: number
-  frameTime: number
-  shaderBreakdown: Record<ShaderType, number>
+const deltaCalculator = {
+  samples: new Float32Array(SAMPLE_SIZE),
+  index: 0,
+  filled: 0,
+
+  push(deltaMs: number) {
+    this.samples[this.index] = deltaMs
+    this.index = (this.index + 1) % SAMPLE_SIZE
+    this.filled = Math.min(this.filled + 1, SAMPLE_SIZE)
+  },
+  mean() {
+    if (this.filled < 1) return 0
+    let sum = 0
+    for (let i = 0; i < this.filled; i++) sum += this.samples[i]
+    return sum / this.filled
+  },
+  jitter() {
+    if (this.filled < 2) return 0
+    const m = this.mean()
+    let variance = 0
+    for (let i = 0; i < this.filled; i++) {
+      const diff = this.samples[i] - m
+      variance += diff * diff
+    }
+    return Math.sqrt(variance / this.filled)
+  },
+  reset() {
+    this.index = 0
+    this.filled = 0
+  }
 }
 
-function MetricsCollector({ onUpdate, shaderBreakdown }: {
-  onUpdate: (m: MaterialMetrics) => void
-  shaderBreakdown: Record<ShaderType, number>
-}) {
-  const fc = useRef(0)
+// ─────────────────────────────────────────────
+// CONSOLE METRICS COLLECTOR (CORREGIDO)
+// ─────────────────────────────────────────────
+function ConsoleMetricsCollector({ count }: { count: number }) {
+  const { gl, scene } = useThree()
+  const frameCount = useRef(0)
+  const lastLogTime = useRef(performance.now() - 2000)
+  const lastCount = useRef(count)
+  
+  // Ref para capturar el pico de compilación
+  const compilationSpike = useRef(0)
+
+  if (lastCount.current !== count) {
+    lastCount.current = count
+    frameCount.current = 0
+    compilationSpike.current = 0
+    deltaCalculator.reset()
+    lastLogTime.current = performance.now() - 2000 
+  }
+
   useFrame((_, delta) => {
-    const ms = delta * 1000
-    frameBuffer[bufIdx] = ms
-    bufIdx = (bufIdx + 1) % 60
-    bufFilled = Math.min(bufFilled + 1, 60)
-    fc.current++
-    if (fc.current % 10 !== 0) return
-    const n = bufFilled
-    let sum = 0
-    for (let i = 0; i < n; i++) sum += frameBuffer[i]
-    const mean = sum / n
-    let variance = 0
-    for (let i = 0; i < n; i++) { const d = frameBuffer[i] - mean; variance += d * d }
-    onUpdate({
-      jitter: Math.round(Math.sqrt(variance / n) * 100) / 100,
-      frameBudget: Math.round((mean / 16.667) * 100 * 10) / 10,
-      frameTime: Math.round(mean * 100) / 100,
-      shaderBreakdown,
-    })
+    const now = performance.now()
+    const deltaMs = delta * 1000
+    frameCount.current++
+
+    // 🔴 LA CORRECCIÓN: Ventana de calentamiento (Primeros 5 frames)
+    // El bloqueo de compilación de WebGL ocurre durante el render del frame 1, 
+    // lo que dispara masivamente el `delta` del frame 2 o 3.
+    if (frameCount.current <= 5) {
+      if (deltaMs > compilationSpike.current) {
+        compilationSpike.current = deltaMs
+      }
+    } else {
+      // Solo alimentamos el estado estacionario (Jitter) después del calentamiento
+      deltaCalculator.push(deltaMs)
+    }
+
+    if (now - lastLogTime.current >= 2000) {
+      const perfState = getPerf ? getPerf() : null
+      const cpuTime = perfState?.log?.cpu ?? 0
+      const meanFrameTime = deltaCalculator.mean()
+      const currentFps = meanFrameTime > 0 ? 1000 / meanFrameTime : 0
+      const jitter = deltaCalculator.jitter()
+      
+      const vram = getVRAMUsage(gl, scene)
+
+      console.log(
+        `%c[PBR Shaders] ${count.toLocaleString()} Materiales Complejos`,
+        'color:#f43f5e;font-weight:bold;font-size:12px'
+      )
+      console.log(`%cMotor%c React Three Fiber`, 'color:#94a3b8', 'color:#e2e8f0;font-weight:600')
+      console.log(`%cEntidades%c ${count}`, 'color:#94a3b8', 'color:#e2e8f0;font-weight:600')
+      console.log(`%cFPS%c ${Math.round(currentFps)}`, 'color:#94a3b8', 'color:#e2e8f0;font-weight:600')
+      console.log(`%cCPU (ms)%c ${cpuTime.toFixed(2)} ms`, 'color:#94a3b8', 'color:#38bdf8;font-weight:600')
+      console.log(`%cFrame Time (ms)%c ${meanFrameTime.toFixed(2)} ms`, 'color:#94a3b8', 'color:#e2e8f0;font-weight:600')
+      console.log(`%cVRAM (mb)%c ${vram.total} MB`, 'color:#94a3b8', 'color:#a78bfa;font-weight:600')
+      console.log(`%cJitter — steady state (ms)%c ${jitter.toFixed(2)} ms`, 'color:#94a3b8', 'color:#fbbf24;font-weight:600')
+      
+      // Mostrará el pico correctamente (ej. 150.45 ms)
+      console.log(`%cCompilation spike (ms)%c ${compilationSpike.current.toFixed(2)} ms`, 'color:#94a3b8', 'color:#f87171;font-weight:600')
+      console.log('--------------------------------------------------')
+
+      lastLogTime.current = now
+    }
   })
+
   return null
 }
 
+// ─────────────────────────────────────────────
+// MATERIALES COMPLEJOS Y ESCENA
+// ─────────────────────────────────────────────
 function ComplexMaterials({ count }: { count: number }) {
   const objects = useMemo(() => {
     return Array.from({ length: count }, (_, i) => ({
@@ -82,7 +140,6 @@ function ComplexMaterials({ count }: { count: number }) {
       ] as [number, number, number],
       scale: Math.random() * 1.5 + 0.5,
       color: new THREE.Color().setHSL(i / count, 0.7, 0.5),
-      // ✅ i % 3: distribución equitativa y reproducible (no aleatoria)
       type: i % 3,
     }))
   }, [count])
@@ -97,13 +154,12 @@ function ComplexMaterials({ count }: { count: number }) {
       {objects.map((obj, i) => (
         <mesh
           key={i}
-          // ✅ Geometría compartida: no crea instancias nuevas
           geometry={i % 2 === 0 ? torusKnotGeom : sphereGeom}
           position={obj.position}
           rotation={obj.rotation}
           scale={obj.scale}
         >
-          {/* TIPO 0: TRANSMISSION - El más pesado */}
+          {/* TIPO 0: TRANSMISSION */}
           {obj.type === 0 && (
             <MeshTransmissionMaterial
               backside
@@ -117,7 +173,7 @@ function ComplexMaterials({ count }: { count: number }) {
             />
           )}
 
-          {/* TIPO 1: METAL PBR - Reflejos HDRI */}
+          {/* TIPO 1: METAL PBR */}
           {obj.type === 1 && (
             <meshPhysicalMaterial
               color={obj.color}
@@ -148,54 +204,10 @@ function ComplexMaterials({ count }: { count: number }) {
 }
 
 // ─────────────────────────────────────────────
-// HUD
+// COMPONENTE PRINCIPAL
 // ─────────────────────────────────────────────
-function MaterialsHUD({ metrics, count }: { metrics: MaterialMetrics; count: number }) {
-  const jitterColor = metrics.jitter < 2 ? 'text-emerald-400' : metrics.jitter < 5 ? 'text-yellow-400' : 'text-red-400'
-  const budgetColor = metrics.frameBudget < 50 ? 'text-emerald-400' : metrics.frameBudget < 85 ? 'text-yellow-400' : 'text-red-400'
-
-  return (
-    <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-2 min-w-[175px]">
-      <div className="bg-black/80 backdrop-blur border border-slate-500/40 px-4 py-3 rounded-xl">
-        <p className="text-gray-400 text-xs uppercase tracking-widest mb-1">Frame Time</p>
-        <p className="text-2xl font-mono font-black text-slate-300">{metrics.frameTime.toFixed(2)}<span className="text-xs text-gray-500 ml-1">ms</span></p>
-      </div>
-      <div className="bg-black/80 backdrop-blur border border-orange-500/40 px-4 py-3 rounded-xl">
-        <p className="text-gray-400 text-xs uppercase tracking-widest mb-1">Jitter</p>
-        <p className={`text-2xl font-mono font-black ${jitterColor}`}>{metrics.jitter.toFixed(2)}<span className="text-xs text-gray-500 ml-1">ms</span></p>
-        <p className="text-gray-600 text-[10px]">spike por compilación shader</p>
-      </div>
-      <div className="bg-black/80 backdrop-blur border border-blue-500/40 px-4 py-3 rounded-xl">
-        <p className="text-gray-400 text-xs uppercase tracking-widest mb-1">Frame Budget</p>
-        <p className={`text-2xl font-mono font-black ${budgetColor}`}>{metrics.frameBudget.toFixed(1)}<span className="text-xs text-gray-500 ml-1">%</span></p>
-      </div>
-      <div className="bg-black/80 backdrop-blur border border-violet-500/40 px-4 py-3 rounded-xl">
-        <p className="text-gray-400 text-xs uppercase tracking-widest mb-2">Shader Variants</p>
-        {SHADER_TYPES.map((t) => (
-          <div key={t} className="flex justify-between text-[11px] mb-1">
-            <span className="text-gray-400">{t}</span>
-            <span className="text-violet-400 font-mono font-bold">{metrics.shaderBreakdown[t]}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
-
 export default function MaterialsStressTest() {
-  const [count, setCount] = useState(128)
-  const [metrics, setMetrics] = useState<MaterialMetrics>({
-    jitter: 0, frameBudget: 0, frameTime: 0,
-    shaderBreakdown: { 'Transmission': 0, 'Metal PBR': 0, 'Clearcoat+Sheen': 0 },
-  })
-
-  const shaderBreakdown = useMemo<Record<ShaderType, number>>(() => ({
-    'Transmission': Math.ceil(count / 3),
-    'Metal PBR': Math.floor(count / 3),
-    'Clearcoat+Sheen': Math.floor(count / 3),
-  }), [count])
-
-  const handleMetrics = useCallback((m: MaterialMetrics) => setMetrics(m), [])
+  const [count, setCount] = useState(32)
 
   return (
     <main className="relative w-full h-screen bg-[#050505] overflow-hidden">
@@ -207,19 +219,18 @@ export default function MaterialsStressTest() {
         inputConfig={{ unit: 'normal', type: 'values', values: [8, 16, 32, 64, 128] }}
       />
 
-      <MaterialsHUD metrics={metrics} count={count} />
-
       <Canvas
-        shadows={false} // ✅ OFF: aislar costo de material, no de sombras
+        shadows={false}
         camera={{ position: [0, 0, 40], fov: 45 }}
         gl={{ antialias: true, powerPreference: 'high-performance' }}
       >
-        <MetricsCollector onUpdate={handleMetrics} shaderBreakdown={shaderBreakdown} />
-        <DebugTools title="PBR / Transmission Stress" entityCount={count} />
+        {/* Recolector de CPU oculto */}
+        <Perf minimal style={{ display: 'none' }} />
+        
+        {/* Recolector de métricas de consola (sin HUD) */}
+        <ConsoleMetricsCollector count={count} />
 
         <Suspense fallback={<Loader3D />}>
-          <OrbitControls makeDefault />
-          {/* ✅ Environment obligatorio para PBR. Sin él los reflejos no se evalúan */}
           <Environment preset="studio" background blur={0.5} />
           <ComplexMaterials count={count} />
         </Suspense>

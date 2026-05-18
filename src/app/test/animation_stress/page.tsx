@@ -3,86 +3,125 @@
 import { Canvas, useFrame } from '@react-three/fiber'
 import { useRef, useMemo, useState, useCallback, Suspense, useEffect } from 'react'
 import * as THREE from 'three'
+import { Perf, getPerf } from 'r3f-perf'
 import PerformanceOverlay from '@/components/test/PerformanceOverlay'
-import DebugTools from '@/components/DebugTools'
 import Loader3D from '@/components/ui/Loader3D'
 import { OrbitControls } from '@react-three/drei'
 
 // ─────────────────────────────────────────────
-// PARÁMETROS DEL TEST (deben ser idénticos en Babylon)
+// PARÁMETROS DEL TEST
 // ─────────────────────────────────────────────
-// Objetivo: medir costo de N useFrame callbacks + N materiales únicos
-// Geometría compartida: 1 IcosahedronGeometry (sin GC overhead)
-// Materiales: 1 por esfera (mide Material Management de Three.js)
-// Animación: posición Y + escala + rotación por ref directa (sin React state)
-// ─────────────────────────────────────────────
-
-// Geometría compartida: evita que el test falle por memoria en lugar de por lógica
 const sphereGeometry = new THREE.IcosahedronGeometry(0.3, 1)
-
-// ─────────────────────────────────────────────
-// MÉTRICAS DE RENDIMIENTO
-// Buffer circular de los últimos N frame times para calcular jitter
-// ─────────────────────────────────────────────
-const JITTER_SAMPLE_SIZE = 60 // Ventana de 1 segundo a 60fps
+const SAMPLE_SIZE = 120 // ~2 segundos a 60fps para un 1% Low confiable
 
 interface AnimMetrics {
-  jitter: number        // Desviación estándar del frame time (ms)
-  frameBudget: number   // % del presupuesto de 16.67ms usado
-  frameTime: number     // Frame time promedio (ms)
+  motor: string
+  entidades: number
+  fps: number
+  onePercentLow: number
+  cpuMs: number
+  frameTime: number
+  frameBudget: number
+  useFrameLoops: number
 }
 
-// Calculador de métricas fuera del componente para no crear closures en cada render
+// Calculador matemático estricto
 const metricsCalculator = {
-  samples: new Float32Array(JITTER_SAMPLE_SIZE),
+  samples: new Float32Array(SAMPLE_SIZE),
   index: 0,
   filled: 0,
 
   push(delta: number) {
     const ms = delta * 1000
     this.samples[this.index] = ms
-    this.index = (this.index + 1) % JITTER_SAMPLE_SIZE
-    this.filled = Math.min(this.filled + 1, JITTER_SAMPLE_SIZE)
+    this.index = (this.index + 1) % SAMPLE_SIZE
+    this.filled = Math.min(this.filled + 1, SAMPLE_SIZE)
   },
 
-  compute(): AnimMetrics {
-    if (this.filled < 2) return { jitter: 0, frameBudget: 0, frameTime: 0 }
+  compute(count: number, cpuTime: number): AnimMetrics {
+    if (this.filled < 10) {
+      return {
+        motor: 'React Three Fiber', entidades: count, fps: 0, onePercentLow: 0,
+        cpuMs: cpuTime, frameTime: 0, frameBudget: 0, useFrameLoops: count
+      }
+    }
 
     const n = this.filled
     let sum = 0
     for (let i = 0; i < n; i++) sum += this.samples[i]
-    const mean = sum / n
+    const meanTime = sum / n
+    const currentFps = meanTime > 0 ? 1000 / meanTime : 0
 
-    let variance = 0
-    for (let i = 0; i < n; i++) {
-      const diff = this.samples[i] - mean
-      variance += diff * diff
-    }
-    const jitter = Math.sqrt(variance / n)
-    const frameBudget = (mean / 16.667) * 100
+    // Cálculo del 1% Low (los peores frames = los tiempos más altos)
+    const sortedSamples = Float32Array.from(this.samples.slice(0, n)).sort()
+    // Tomamos el percentil 99 (el 1% de frames más lentos)
+    const p99Index = Math.floor(n * 0.99)
+    const worstFrameTime = sortedSamples[p99Index]
+    const onePercentLowFps = worstFrameTime > 0 ? 1000 / worstFrameTime : 0
 
     return {
-      jitter: Math.round(jitter * 100) / 100,
-      frameBudget: Math.round(frameBudget * 10) / 10,
-      frameTime: Math.round(mean * 100) / 100,
+      motor: 'React Three Fiber',
+      entidades: count,
+      fps: Math.round(currentFps),
+      onePercentLow: Math.round(onePercentLowFps),
+      cpuMs: cpuTime,
+      frameTime: Math.round(meanTime * 100) / 100,
+      frameBudget: Math.round((meanTime / 16.667) * 100),
+      useFrameLoops: count // 1 loop exacto por cada entidad en este test
     }
   },
+  reset() {
+    this.index = 0
+    this.filled = 0
+  }
 }
 
 // ─────────────────────────────────────────────
-// COLLECTOR: 1 useFrame que mide y reporta métricas
-// Separado de los objetos para no contaminar la medición
+// COLLECTOR
 // ─────────────────────────────────────────────
-function MetricsCollector({ onUpdate }: { onUpdate: (m: AnimMetrics) => void }) {
+function MetricsCollector({ onUpdate, count }: { onUpdate: (m: AnimMetrics) => void, count: number }) {
   const frameCount = useRef(0)
+  const lastLogTime = useRef(performance.now() - 2000)
+  const lastCount = useRef(count)
+
+  if (lastCount.current !== count) {
+    lastCount.current = count
+    frameCount.current = 0
+    metricsCalculator.reset()
+    lastLogTime.current = performance.now() - 2000 // Forzar log inmediato al cambiar
+  }
 
   useFrame((_, delta) => {
     metricsCalculator.push(delta)
     frameCount.current++
 
-    // Reportar cada 10 frames para no saturar React state
+    const perfState = getPerf ? getPerf() : null
+    const cpuTime = perfState?.log?.cpu ?? 0
+
+    // Actualizar UI cada 10 frames para no ahogar a React
     if (frameCount.current % 10 === 0) {
-      onUpdate(metricsCalculator.compute())
+      onUpdate(metricsCalculator.compute(count, cpuTime))
+    }
+
+    const now = performance.now()
+    // Imprimir en consola cada 2 segundos
+    if (now - lastLogTime.current >= 10000) {
+      const metrics = metricsCalculator.compute(count, cpuTime)
+      
+      console.log(
+        `%c[Animación & Materiales] ${count.toLocaleString()} Entidades`,
+        'color:#c084fc;font-weight:bold;font-size:12px'
+      )
+      console.log(`%cMotor%c ${metrics.motor}`, 'color:#94a3b8', 'color:#e2e8f0;font-weight:600')
+      console.log(`%cFPS%c ${metrics.fps}`, 'color:#94a3b8', 'color:#e2e8f0;font-weight:600')
+      console.log(`%c1% Low (FPS)%c ${metrics.onePercentLow}`, 'color:#94a3b8', 'color:#f87171;font-weight:600')
+      console.log(`%cCPU (ms)%c ${metrics.cpuMs.toFixed(2)} ms`, 'color:#94a3b8', 'color:#38bdf8;font-weight:600')
+      console.log(`%cFrame Time%c ${metrics.frameTime.toFixed(2)} ms`, 'color:#94a3b8', 'color:#e2e8f0;font-weight:600')
+      console.log(`%cFrame Budget%c ${metrics.frameBudget}%`, 'color:#94a3b8', 'color:#fbbf24;font-weight:600')
+      console.log(`%cuseFrame loops%c ${metrics.useFrameLoops.toLocaleString()}`, 'color:#94a3b8', 'color:#e2e8f0;font-weight:600')
+      console.log('--------------------------------------------------')
+      
+      lastLogTime.current = now
     }
   })
 
@@ -91,16 +130,8 @@ function MetricsCollector({ onUpdate }: { onUpdate: (m: AnimMetrics) => void }) 
 
 // ─────────────────────────────────────────────
 // ESFERA INDIVIDUAL
-// Cada una registra su propio useFrame → mide overhead de N callbacks
-// Material único por esfera → mide Material Management de Three.js
 // ─────────────────────────────────────────────
-function AnimatedSphere({
-  position,
-  phase,
-}: {
-  position: [number, number, number]
-  phase: number
-}) {
+function AnimatedSphere({ position, phase }: { position: [number, number, number]; phase: number }) {
   const ref = useRef<THREE.Mesh>(null!)
 
   useFrame((state) => {
@@ -111,13 +142,13 @@ function AnimatedSphere({
     ref.current.rotation.z = t * 0.3
   })
 
-  // Hue estable: calculado del phase, no de delay*50 que crece sin límite
   const hue = Math.round((phase / (Math.PI * 2)) * 360)
 
   return (
     <mesh ref={ref} position={position} geometry={sphereGeometry}>
       <meshStandardMaterial
         color={`hsl(${hue}, 70%, 50%)`}
+        color-convert-colorspace={false}
         emissive={`hsl(${hue}, 70%, 30%)`}
         roughness={0.3}
         metalness={0.7}
@@ -135,7 +166,6 @@ function AnimationScene({ count }: { count: number }) {
 
       return {
         position: [Math.cos(theta) * r, 0, Math.sin(theta) * r] as [number, number, number],
-        // ✅ Phase distribuida en [0, 2π], no delay*0.15 que crece sin límite
         phase: (i / count) * Math.PI * 2,
       }
     })
@@ -153,108 +183,89 @@ function AnimationScene({ count }: { count: number }) {
 }
 
 // ─────────────────────────────────────────────
-// HUD DE MÉTRICAS ABAJO A LA DERECHA
+// HUD DE MÉTRICAS EXCLUSIVAS
 // ─────────────────────────────────────────────
-function AnimMetricsHUD({
-  metrics,
-  count,
-}: {
-  metrics: AnimMetrics
-  count: number
-}) {
-  // Colores según severidad
-  const jitterColor =
-    metrics.jitter < 1 ? 'text-emerald-400' :
-    metrics.jitter < 3 ? 'text-yellow-400' :
-    'text-red-400'
-
-  const budgetColor =
-    metrics.frameBudget < 50 ? 'text-emerald-400' :
-    metrics.frameBudget < 80 ? 'text-yellow-400' :
-    'text-red-400'
-
+function MetricsHUD({ metrics }: { metrics: AnimMetrics }) {
+  // Color dinámico para el 1% Low: Rojo si baja de 30, Amarillo si baja de 50
+  const lowColor = metrics.onePercentLow < 30 ? 'text-red-400' : metrics.onePercentLow < 50 ? 'text-yellow-400' : 'text-emerald-400'
+  const budgetColor = metrics.frameBudget > 100 ? 'text-red-400' : metrics.frameBudget > 80 ? 'text-yellow-400' : 'text-emerald-400'
 
   return (
-    <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-2 min-w-[170px]">
-
-      {/* Frame Time */}
-      <div className="bg-black/80 backdrop-blur-xl border border-slate-500/40 px-4 py-3 rounded-xl">
-        <p className="text-gray-400 text-xs uppercase tracking-widest mb-1">Frame Time</p>
-        <p className="text-2xl font-mono font-black text-slate-300">
-          {metrics.frameTime.toFixed(2)}
-          <span className="text-xs text-gray-500 ml-1">ms</span>
-        </p>
-        <p className="text-gray-600 text-[10px]">promedio últimos 60 frames</p>
+    <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-2 min-w-[240px] bg-black/80 backdrop-blur-xl border border-white/10 p-4 rounded-xl font-mono text-sm">
+      <div className="flex justify-between border-b border-white/10 pb-1 mb-2 text-xs uppercase tracking-wider text-gray-400 font-bold">
+        <span>Estrés R3F</span>
       </div>
-
-      {/* Jitter */}
-      <div className="bg-black/80 backdrop-blur-xl border border-orange-500/40 px-4 py-3 rounded-xl">
-        <p className="text-gray-400 text-xs uppercase tracking-widest mb-1">Jitter</p>
-        <p className={`text-2xl font-mono font-black ${jitterColor}`}>
-          {metrics.jitter.toFixed(2)}
-          <span className="text-xs text-gray-500 ml-1">ms</span>
-        </p>
-        <p className="text-gray-600 text-[10px]">desv. estándar frame time</p>
+      <div className="flex justify-between">
+        <span>Motor:</span>
+        <span className="text-white font-bold">{metrics.motor}</span>
       </div>
-
-      {/* Frame Budget */}
-      <div className="bg-black/80 backdrop-blur-xl border border-blue-500/40 px-4 py-3 rounded-xl">
-        <p className="text-gray-400 text-xs uppercase tracking-widest mb-1">Frame Budget</p>
-        <p className={`text-2xl font-mono font-black ${budgetColor}`}>
-          {metrics.frameBudget.toFixed(1)}
-          <span className="text-xs text-gray-500 ml-1">%</span>
-        </p>
-        <p className="text-gray-600 text-[10px]">de 16.67ms (60fps target)</p>
+      <div className="flex justify-between">
+        <span>Entidades:</span>
+        <span className="text-purple-400 font-bold">{metrics.entidades.toLocaleString()}</span>
       </div>
-
-      {/* useFrame callbacks */}
-      <div className="bg-black/80 backdrop-blur-xl border border-violet-500/40 px-4 py-3 rounded-xl">
-        <p className="text-gray-400 text-xs uppercase tracking-widest mb-1">useFrame loops</p>
-        <p className="text-2xl font-mono font-black text-violet-400">
-          {count + 1}
-        </p>
-        <p className="text-gray-600 text-[10px]">{count} esferas + 1 monitor</p>
+      <div className="flex justify-between mt-2">
+        <span>FPS:</span>
+        <span className="font-bold text-sky-400">{metrics.fps}</span>
       </div>
-
+      <div className="flex justify-between font-bold">
+        <span className="text-gray-300">1% Low (FPS):</span>
+        <span className={lowColor}>{metrics.onePercentLow}</span>
+      </div>
+      <div className="flex justify-between mt-2">
+        <span>CPU:</span>
+        <span className="text-sky-400">{metrics.cpuMs.toFixed(2)} ms</span>
+      </div>
+      <div className="flex justify-between">
+        <span>Frame Time:</span>
+        <span className="text-white">{metrics.frameTime.toFixed(2)} ms</span>
+      </div>
+      <div className="flex justify-between">
+        <span>Frame Budget:</span>
+        <span className={budgetColor}>{metrics.frameBudget}%</span>
+      </div>
+      <div className="flex justify-between border-t border-white/10 mt-2 pt-2">
+        <span className="text-gray-400">useFrame loops/frame:</span>
+        <span className="text-purple-400">{metrics.useFrameLoops.toLocaleString()}</span>
+      </div>
     </div>
   )
 }
 
 // ─────────────────────────────────────────────
-// PÁGINA PRINCIPAL
+// VISTA PRINCIPAL
+// 64
+// 256
+// 1.000
+// 4.000
+// 16.000
 // ─────────────────────────────────────────────
 export default function AnimationStressTest() {
-  const [count, setCount] = useState(16000)
+  const [count, setCount] = useState(16384)
   const [metrics, setMetrics] = useState<AnimMetrics>({
-    jitter: 0,
-    frameBudget: 0,
-    frameTime: 0,
+    motor: 'React Three Fiber', entidades: 0, fps: 0, onePercentLow: 0,
+    cpuMs: 0, frameTime: 0, frameBudget: 0, useFrameLoops: 0
   })
-
-  const handleMetricsUpdate = useCallback((m: AnimMetrics) => {
-    setMetrics(m)
-  }, [])
 
   return (
     <main className="relative w-full h-screen bg-[#050505] overflow-hidden">
       <PerformanceOverlay
-        title={`${count} Refs Independientes`}
+        title="Overhead: Loops & Materiales"
         input={true}
         count={count}
         setCount={setCount}
         inputConfig={{ unit: 'normal', type: 'values', values: [64, 256, 1000, 4000, 16000] }}
       />
 
-      <AnimMetricsHUD metrics={metrics} count={count} />
+      <MetricsHUD metrics={metrics} />
 
-      <Canvas camera={{ position: [0, 15, 25], fov: 50 }} dpr={[1, 2]}>
-        <DebugTools title="Animación (useFrame × N)" entityCount={count} />
-
-        {/* Collector fuera del Suspense: mide desde el primer frame */}
-        <MetricsCollector onUpdate={handleMetricsUpdate} />
+      <Canvas camera={{ position: [0, 15, 25], fov: 50 }} dpr={[1, 2]} gl={{ antialias: false, powerPreference: "high-performance" }}>
+        
+        {/* Recolector de telemetría oculto */}
+        <Perf minimal style={{ display: 'none' }} />
+        
+        <MetricsCollector onUpdate={setMetrics} count={count} />
 
         <Suspense fallback={<Loader3D />}>
-          <OrbitControls makeDefault />
           <AnimationScene count={count} />
         </Suspense>
       </Canvas>

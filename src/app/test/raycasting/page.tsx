@@ -31,6 +31,8 @@ interface PerformanceMetrics {
   frameTime: number
   jitter: number
   intersectionTime: number
+  maxFrameTime: number
+  onePercentLow: number
 }
 
 function createTarget(id: number): TargetData {
@@ -80,6 +82,24 @@ const deltaCalculator = {
       variance += diff * diff
     }
     return Math.sqrt(variance / this.filled)
+  },
+  max() {
+    if (this.filled < 1) return 0
+    let maxVal = 0
+    for (let i = 0; i < this.filled; i++) {
+      if (this.samples[i] > maxVal) {
+        maxVal = this.samples[i]
+      }
+    }
+    return maxVal
+  },
+  onePercentLow() {
+    if (this.filled < 1) return 0
+    const activeSamples = Array.from(this.samples.subarray(0, this.filled))
+    activeSamples.sort((a, b) => a - b)
+    const index = Math.min(Math.max(Math.floor(this.filled * 0.99), 0), this.filled - 1)
+    const percentileFrameTime = activeSamples[index]
+    return percentileFrameTime > 0 ? 1000 / percentileFrameTime : 0
   },
   reset() {
     this.index = 0
@@ -216,12 +236,14 @@ function RaycastAndMetricsCollector({
         cpuTime: logData?.cpu ?? 0,
         frameTime: deltaCalculator.mean(),
         jitter: deltaCalculator.jitter(),
-        intersectionTime: smoothedIntersectionTime.current
+        intersectionTime: smoothedIntersectionTime.current,
+        maxFrameTime: deltaCalculator.max(),
+        onePercentLow: Math.round(deltaCalculator.onePercentLow())
       })
     }
 
     // Reportar en consola estructuradamente cada 10 segundos
-    if (now - lastLogTime.current >= 10000) {
+    if (now - lastLogTime.current >= 5000) {
       const meanFrameTime = deltaCalculator.mean()
       
       console.log(
@@ -229,8 +251,10 @@ function RaycastAndMetricsCollector({
         'color:#6366f1;font-weight:bold;font-size:12px'
       )
       console.log(`%cFPS%c ${Math.round(1000 / meanFrameTime)}`, 'color:#94a3b8', 'color:#f1f5f9;font-weight:600')
+      console.log(`%c1% Low (FPS)%c ${Math.round(deltaCalculator.onePercentLow())} FPS`, 'color:#94a3b8', 'color:#3b82f6;font-weight:600')
       console.log(`%cCPU (ms)%c ${(logData?.cpu ?? 0).toFixed(2)} ms`, 'color:#94a3b8', 'color:#38bdf8;font-weight:600')
       console.log(`%cFrame Time (ms)%c ${meanFrameTime.toFixed(2)} ms`, 'color:#94a3b8', 'color:#f1f5f9;font-weight:600')
+      console.log(`%cMax Frame Time (ms)%c ${deltaCalculator.max().toFixed(2)} ms`, 'color:#94a3b8', 'color:#ef4444;font-weight:600')
       console.log(`%cJitter (ms)%c ${deltaCalculator.jitter().toFixed(2)} ms`, 'color:#94a3b8', 'color:#fbbf24;font-weight:600')
       console.log(`%cIntersection Time (ms)%c ${smoothedIntersectionTime.current.toFixed(3)} ms`, 'color:#94a3b8', 'color:#f87171;font-weight:600')
       
@@ -272,12 +296,20 @@ function GameHUD({
         <span className="font-bold text-sky-400">{metrics.fps}</span>
       </div>
       <div className="flex justify-between">
+        <span>1% Low:</span>
+        <span className="font-bold text-indigo-400">{metrics.onePercentLow} FPS</span>
+      </div>
+      <div className="flex justify-between">
         <span>CPU (ms):</span>
         <span className="text-sky-400">{metrics.cpuTime.toFixed(2)}</span>
       </div>
       <div className="flex justify-between">
         <span>Frame Time:</span>
         <span className="text-white">{metrics.frameTime.toFixed(2)} ms</span>
+      </div>
+      <div className="flex justify-between">
+        <span>Max Frame Time:</span>
+        <span className="text-orange-400">{metrics.maxFrameTime.toFixed(2)} ms</span>
       </div>
       <div className="flex justify-between">
         <span>Jitter:</span>
@@ -303,12 +335,12 @@ function Crosshair() {
 // VISTA PRINCIPAL
 // ─────────────────────────────────────────────
 export default function RaycastTest() {
-  const [count, setCount] = useState(400)
+  const [count, setCount] = useState(5000)
   const [score, setScore] = useState(0)
   const [missed, setMissed] = useState(0)
   
   const [metrics, setMetrics] = useState<PerformanceMetrics>({
-    fps: 0, cpuTime: 0, frameTime: 0, jitter: 0, intersectionTime: 0
+    fps: 0, cpuTime: 0, frameTime: 0, jitter: 0, intersectionTime: 0, maxFrameTime: 0, onePercentLow: 0
   })
 
   const nextId = useRef(0)

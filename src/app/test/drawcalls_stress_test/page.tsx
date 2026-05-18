@@ -1,36 +1,22 @@
 'use client'
 
-import { Canvas, useFrame } from '@react-three/fiber'
-import { useState, useMemo, useRef, useCallback, useEffect, Suspense } from 'react'
+import { Canvas, useFrame, useThree } from '@react-three/fiber'
+import { useState, useMemo, useRef, Suspense } from 'react'
 import * as THREE from 'three'
+import { Perf, getPerf } from 'r3f-perf'
 import PerformanceOverlay from '@/components/test/PerformanceOverlay'
 import DebugTools from '@/components/DebugTools'
 import Loader3D from '@/components/ui/Loader3D'
 import { OrbitControls } from '@react-three/drei'
+import { useEffect } from 'react'
+
+interface ConsoleMetricsCollectorProps {
+  count: number // Cantidad de meshes actuales en escena
+}
 
 // ─────────────────────────────────────────────
-// POR QUÉ ESTE TEST ES DIFERENTE A LOS OTROS
+// PARAMETROS Y GEOMETRÍAS PRE-CALCULADAS
 // ─────────────────────────────────────────────
-// Todos los tests anteriores usan InstancedMesh (1 draw call para N objetos)
-// Este test usa N meshes independientes con N materiales distintos
-// → N draw calls (uno por objeto)
-//
-// Esto representa el escenario real de una escena 3D:
-// personajes, muebles, props → cada uno con geometría y material único
-//
-// Lo que mides: overhead del framework por draw call
-// Es el benchmark más honesto para comparar R3F vs Babylon en escenas reales
-// ─────────────────────────────────────────────
-//
-// PARÁMETROS (deben ser idénticos en Babylon):
-// Geometría: 5 tipos distintos rotando (no instanciadas)
-// Material: 1 MeshStandardMaterial único por objeto (N materials)
-// Objetos estáticos: sí (aislar draw call cost, no animación)
-// Sombras: OFF (aislar draw calls, no shadow maps)
-// Draw calls: N (1 por objeto, sin instancing)
-// ─────────────────────────────────────────────
-
-// 5 geometrías distintas para simular variedad real de escena
 const GEOMETRIES = [
   new THREE.BoxGeometry(1, 1, 1),
   new THREE.SphereGeometry(0.6, 16, 16),
@@ -39,56 +25,112 @@ const GEOMETRIES = [
   new THREE.TorusGeometry(0.5, 0.2, 8, 16),
 ]
 
-// ─────────────────────────────────────────────
-// MÉTRICAS
-// ─────────────────────────────────────────────
-const frameBuffer = new Float32Array(60)
-let bufIdx = 0, bufFilled = 0
+const SAMPLE_SIZE = 120
 
-interface DrawCallMetrics {
-  frameTime: number
-  jitter: number
-  frameBudget: number
-  drawCalls: number   // Leído del renderer info
+// Calculador matemático estricto para estabilidad en Steady State
+const deltaCalculator = {
+  samples: new Float32Array(SAMPLE_SIZE),
+  index: 0,
+  filled: 0,
+
+  push(deltaMs: number) {
+    this.samples[this.index] = deltaMs
+    this.index = (this.index + 1) % SAMPLE_SIZE
+    this.filled = Math.min(this.filled + 1, SAMPLE_SIZE)
+  },
+  mean() {
+    if (this.filled < 1) return 0
+    let sum = 0
+    for (let i = 0; i < this.filled; i++) sum += this.samples[i]
+    return sum / this.filled
+  },
+  jitter() {
+    if (this.filled < 2) return 0
+    const m = this.mean()
+    let variance = 0
+    for (let i = 0; i < this.filled; i++) {
+      const diff = this.samples[i] - m
+      variance += diff * diff
+    }
+    return Math.sqrt(variance / this.filled)
+  },
+  reset() {
+    this.index = 0
+    this.filled = 0
+  }
 }
 
-function MetricsCollector({ onUpdate }: { onUpdate: (m: DrawCallMetrics) => void }) {
-  const fc = useRef(0)
+// ─────────────────────────────────────────────
+// CONSOLE METRICS COLLECTOR (EXCLUSIVO CONSOLA)
+// ─────────────────────────────────────────────
+function ConsoleMetricsCollector({ count }: { count: number }) {
+  const { gl } = useThree()
+  const frameCount = useRef(0)
+  const lastLogTime = useRef(performance.now() - 2000)
+  const lastCount = useRef(count)
+  const drawCallsRef = useRef(0)
 
-  useFrame(({ gl }) => {
-    // ✅ gl.info.render.calls = draw calls reales del frame
-    const calls = gl.info.render.calls
+  if (lastCount.current !== count) {
+    lastCount.current = count
+    frameCount.current = 0
+    deltaCalculator.reset()
+    lastLogTime.current = performance.now() - 2000 // Forzar log inmediato al mutar el conteo
+  }
 
-    const ms = (performance.now() - (MetricsCollector as any)._last) || 0;
-    (MetricsCollector as any)._last = performance.now()
+  // ─── Post-render: captura draw calls reales del frame recién completado
+  useFrame((_, delta) => {
+    drawCallsRef.current = gl.info.render.calls // ✅ Frame ya renderizado
+  }, -1)
 
-    frameBuffer[bufIdx] = ms
-    bufIdx = (bufIdx + 1) % 60
-    bufFilled = Math.min(bufFilled + 1, 60)
-    fc.current++
-    if (fc.current % 10 !== 0) return
+  useFrame((_, delta) => {
+    const now = performance.now()
+    const deltaMs = delta * 1000
+    frameCount.current++
 
-    const n = bufFilled
-    let sum = 0
-    for (let i = 0; i < n; i++) sum += frameBuffer[i]
-    const mean = sum / n
-    let variance = 0
-    for (let i = 0; i < n; i++) { const d = frameBuffer[i] - mean; variance += d * d }
+    // Ignoramos los primeros 10 frames (warm-up) para asegurar que el Jitter 
+    // represente únicamente el "Steady State" del sobrecosto síncrono por comando
+    if (frameCount.current > 10) {
+      deltaCalculator.push(deltaMs)
+    }
 
-    onUpdate({
-      frameTime: Math.round(mean * 100) / 100,
-      jitter: Math.round(Math.sqrt(variance / n) * 100) / 100,
-      frameBudget: Math.round((mean / 16.667) * 1000) / 10,
-      drawCalls: calls,
-    })
+    if (now - lastLogTime.current >= 2000) {
+      const perfState = getPerf ? getPerf() : null
+      const cpuTime = perfState?.log?.cpu ?? 0
+      const meanFrameTime = deltaCalculator.mean()
+      const currentFps = meanFrameTime > 0 ? 1000 / meanFrameTime : 0
+      const frameBudget = (meanFrameTime / 10.00) * 100
+      const jitter = deltaCalculator.jitter()
+      
+      // 1. Captura directa desde el pipeline nativo de WebGL
+      const activeDrawCalls = gl.info.render.calls
+
+      // 2. Captura procesada desde r3f-perf
+      const r3fPerfDrawCalls = perfState?.log?.drawCalls ?? 0
+
+      console.log(
+        `%c[Draw Calls Stress] ${count.toLocaleString()} Meshes independientes con Material Único`,
+        'color:#f59e0b;font-weight:bold;font-size:12px'
+      )
+      console.log(`%cEntidades%c ${count}`, 'color:#94a3b8', 'color:#e2e8f0;font-weight:600')
+      console.log(`%cMotor%c React Three Fiber`, 'color:#94a3b8', 'color:#e2e8f0;font-weight:600')
+      console.log(`%cFPS%c ${Math.round(currentFps)}`, 'color:#94a3b8', 'color:#e2e8f0;font-weight:600')
+      console.log(`%cDraw Calls (WebGL Info)%c ${activeDrawCalls}`, 'color:#94a3b8', 'color:#f43f5e;font-weight:700')
+      console.log(`%cDraw Calls (r3f-perf)%c ${r3fPerfDrawCalls}`, 'color:#94a3b8', 'color:#ec4899;font-weight:700')
+      console.log(`%cCPU (ms)%c ${cpuTime.toFixed(2)} ms`, 'color:#94a3b8', 'color:#38bdf8;font-weight:600')
+      console.log(`%cFrame Time (ms)%c ${meanFrameTime.toFixed(2)} ms`, 'color:#94a3b8', 'color:#e2e8f0;font-weight:600')
+      console.log(`%cJitter (ms)%c ${jitter.toFixed(2)} ms`, 'color:#94a3b8', 'color:#fbbf24;font-weight:600')
+      console.log(`%cFrame Budget (%)%c ${frameBudget.toFixed(1)}%`, 'color:#94a3b8', 'color:#f43f5e;font-weight:600')
+      console.log('--------------------------------------------------')
+
+      lastLogTime.current = now
+    }
   })
+
   return null
 }
-;(MetricsCollector as any)._last = performance.now()
 
 // ─────────────────────────────────────────────
-// OBJETO ÚNICO: geometría + material propio
-// Esto es lo que genera 1 draw call por objeto
+// OBJETO ÚNICO (Rompe el Batching e Instancing)
 // ─────────────────────────────────────────────
 function UniqueObject({ position, rotation, scale, color, geomIndex }: {
   position: [number, number, number]
@@ -98,8 +140,6 @@ function UniqueObject({ position, rotation, scale, color, geomIndex }: {
   geomIndex: number
 }) {
   return (
-    // ✅ Cada mesh tiene su propio material (new material por instancia JSX)
-    // → Three.js no puede batching → 1 draw call por objeto
     <mesh
       geometry={GEOMETRIES[geomIndex]}
       position={position}
@@ -116,7 +156,6 @@ function UniqueObject({ position, rotation, scale, color, geomIndex }: {
 }
 
 function DrawCallScene({ count }: { count: number }) {
-  // Datos de los objetos calculados una sola vez
   const objects = useMemo(() => Array.from({ length: count }, (_, i) => ({
     position: [
       (Math.random() - 0.5) * 30,
@@ -135,12 +174,10 @@ function DrawCallScene({ count }: { count: number }) {
 
   return (
     <>
-      {/* Iluminación simple y fija */}
       <ambientLight intensity={0.6} />
       <directionalLight position={[10, 20, 10]} intensity={1.0} />
       <directionalLight position={[-10, -10, -10]} intensity={0.3} color="#4f46e5" />
 
-      {/* ✅ N objetos individuales = N draw calls */}
       {objects.map((obj, i) => (
         <UniqueObject key={i} {...obj} />
       ))}
@@ -149,80 +186,10 @@ function DrawCallScene({ count }: { count: number }) {
 }
 
 // ─────────────────────────────────────────────
-// HUD
+// COMPONENTE PRINCIPAL
 // ─────────────────────────────────────────────
-function DrawCallsHUD({ metrics, count }: { metrics: DrawCallMetrics; count: number }) {
-  const drawColor =
-    metrics.drawCalls < 200 ? 'text-emerald-400' :
-    metrics.drawCalls < 600 ? 'text-yellow-400' :
-    'text-red-400'
-
-  const jitterColor =
-    metrics.jitter < 2 ? 'text-emerald-400' :
-    metrics.jitter < 5 ? 'text-yellow-400' :
-    'text-red-400'
-
-  const budgetColor =
-    metrics.frameBudget < 50 ? 'text-emerald-400' :
-    metrics.frameBudget < 85 ? 'text-yellow-400' :
-    'text-red-400'
-
-  return (
-    <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-2 min-w-[180px]">
-      {/* Draw Calls: la métrica principal de este test */}
-      <div className="bg-black/80 backdrop-blur border border-cyan-500/40 px-4 py-3 rounded-xl">
-        <p className="text-gray-400 text-xs uppercase tracking-widest mb-1">Draw Calls</p>
-        <p className={`text-2xl font-mono font-black ${drawColor}`}>
-          {metrics.drawCalls}
-        </p>
-        <p className="text-gray-600 text-[10px]">1 por objeto (sin instancing)</p>
-      </div>
-
-      <div className="bg-black/80 backdrop-blur border border-slate-500/40 px-4 py-3 rounded-xl">
-        <p className="text-gray-400 text-xs uppercase tracking-widest mb-1">Frame Time</p>
-        <p className="text-2xl font-mono font-black text-slate-300">
-          {metrics.frameTime.toFixed(2)}<span className="text-xs text-gray-500 ml-1">ms</span>
-        </p>
-      </div>
-
-      <div className="bg-black/80 backdrop-blur border border-orange-500/40 px-4 py-3 rounded-xl">
-        <p className="text-gray-400 text-xs uppercase tracking-widest mb-1">Jitter</p>
-        <p className={`text-2xl font-mono font-black ${jitterColor}`}>
-          {metrics.jitter.toFixed(2)}<span className="text-xs text-gray-500 ml-1">ms</span>
-        </p>
-        <p className="text-gray-600 text-[10px]">varianza frame time</p>
-      </div>
-
-      <div className="bg-black/80 backdrop-blur border border-blue-500/40 px-4 py-3 rounded-xl">
-        <p className="text-gray-400 text-xs uppercase tracking-widest mb-1">Frame Budget</p>
-        <p className={`text-2xl font-mono font-black ${budgetColor}`}>
-          {metrics.frameBudget.toFixed(1)}<span className="text-xs text-gray-500 ml-1">%</span>
-        </p>
-        <p className="text-gray-600 text-[10px]">de 16.67ms (60fps)</p>
-      </div>
-
-      {/* Comparación instancing vs draw calls */}
-      <div className="bg-black/80 backdrop-blur border border-violet-500/40 px-4 py-3 rounded-xl">
-        <p className="text-gray-400 text-xs uppercase tracking-widest mb-2">Instancing vs Único</p>
-        <div className="flex justify-between text-[11px] mb-1">
-          <span className="text-gray-400">Con instancing</span>
-          <span className="text-emerald-400 font-mono font-bold">1 DC</span>
-        </div>
-        <div className="flex justify-between text-[11px]">
-          <span className="text-gray-400">Sin instancing</span>
-          <span className="text-red-400 font-mono font-bold">{count} DC</span>
-        </div>
-      </div>
-    </div>
-  )
-}
-
 export default function DrawCallsStressTest() {
   const [count, setCount] = useState(4096)
-  const [metrics, setMetrics] = useState<DrawCallMetrics>({
-    frameTime: 0, jitter: 0, frameBudget: 0, drawCalls: 0,
-  })
-  const handleMetrics = useCallback((m: DrawCallMetrics) => setMetrics(m), [])
 
   return (
     <main className="relative w-full h-screen bg-[#050505] overflow-hidden">
@@ -234,35 +201,22 @@ export default function DrawCallsStressTest() {
         inputConfig={{ unit: 'normal', type: 'values', values: [64, 256, 512, 1024, 4096] }}
       />
 
-      <DrawCallsHUD metrics={metrics} count={count} />
-
       <Canvas
-        shadows={false}  // OFF: aislar costo de draw calls, no sombras
-        camera={{ position: [0, 10, 40], fov: 50 }}
+        shadows={false}
+        camera={{ position: [0, 20, 40], fov: 50 }}
+        gl={{ antialias: false, powerPreference: 'high-performance' }}
       >
-        <MetricsCollector onUpdate={handleMetrics} />
-        <DebugTools title="Draw Calls Stress" entityCount={count} />
-
+        {/* Capturador de CPU interno oculto */}
+        <Perf minimal style={{ display: 'none' }} />
+        <OrbitControls />
+        
+        {/* Monitor e impresor estructurado de la consola */}
+        <ConsoleMetricsCollector count={count} />
+        
         <Suspense fallback={<Loader3D />}>
-          <OrbitControls makeDefault />
           <DrawCallScene count={count} />
         </Suspense>
       </Canvas>
-
-    
-      {/* {metrics.drawCalls} 
-      <div className="absolute bottom-6 left-6 bg-black/70 p-4 rounded-lg border border-cyan-500 text-white text-xs max-w-xs">
-        <h3 className="font-bold text-cyan-400 mb-2">Especificaciones del test</h3>
-        <ul className="space-y-1 text-gray-300">
-          <li>• Objetos: {count} meshes independientes</li>
-          <li>• Materiales: {count} únicos (sin batching)</li>
-          <li>• Geometrías: 5 tipos distintos</li>
-          <li>• Draw calls: {count} (1 por objeto)</li>
-          <li>• Instancing: NO (este es el punto del test)</li>
-          <li>• Sombras: OFF (aislar draw call cost)</li>
-          <li>• Escena: estática (sin animación)</li>
-        </ul>
-      </div>*/}
     </main>
   )
 }

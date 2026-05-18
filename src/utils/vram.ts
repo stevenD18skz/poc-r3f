@@ -10,9 +10,8 @@ export interface VRAMBreakdown {
 }
 
 /**
- * Calculates a highly accurate estimation of VRAM usage in WebGL / Three.js.
- * Unlike rendered-triangle metrics (which multiply per pass/shadow map and scale down with culling),
- * this traverses the actual active scene and inspects loaded WebGL buffers, textures, shadow maps, and canvas buffers.
+ * Cálculo avanzado de VRAM para WebGL / Three.js
+ * Escanea a profundidad Uniforms, MSAA (Multisampling), FBOs internos y Buffers del Canvas.
  */
 export function getVRAMUsage(gl: THREE.WebGLRenderer, scene: THREE.Scene): VRAMBreakdown {
   let geometryBytes = 0
@@ -25,147 +24,175 @@ export function getVRAMUsage(gl: THREE.WebGLRenderer, scene: THREE.Scene): VRAMB
   const seenTextures = new Set<string>()
   const seenShadowMaps = new Set<any>()
 
-  const checkTexture = (prop: any) => {
-    if (prop && prop.isTexture && !seenTextures.has(prop.uuid)) {
-      seenTextures.add(prop.uuid)
+  // El pixel ratio aumenta exponencialmente el peso de los buffers que dependen de la pantalla
+  const pixelRatio = gl.getPixelRatio()
+  const screenWidth = gl.domElement.width
+  const screenHeight = gl.domElement.height
 
-      let bytes = 0
-      if (prop.image) {
-        // Handle CubeTextures or arrays of images (cubemap)
-        const isCube = prop.isCubeTexture || Array.isArray(prop.image)
-        const images = isCube ? prop.image : [prop.image]
-        
-        for (const img of images) {
-          if (!img) continue
-          const width = img.width || 0
-          const height = img.height || 0
-          
-          let bpp = 4 // Default RGBA
-          if (prop.format === THREE.RedFormat || prop.format === (THREE as any).LuminanceFormat || prop.format === 1024 /* LuminanceFormat */) {
-            bpp = 1
+  const checkTexture = (tex: any, isFBO = false, assumedSamples = 1) => {
+    if (!tex || (!tex.isTexture && !tex.isWebGLRenderTarget) || seenTextures.has(tex.uuid)) return
+    seenTextures.add(tex.uuid)
+
+    let width = 0
+    let height = 0
+    let depth = 1
+
+    if (tex.image) {
+      if (Array.isArray(tex.image)) {
+        depth = 6 // Cube texture
+        width = tex.image[0]?.width || 0
+        height = tex.image[0]?.height || 0
+      } else {
+        width = tex.image.width || 0
+        height = tex.image.height || 0
+        if (tex.image.depth) depth = tex.image.depth // Data3DTexture
+      }
+    } else if (tex.source && tex.source.data) {
+      width = tex.source.data.width || 0
+      height = tex.source.data.height || 0
+    } else if (tex.width && tex.height) {
+      // FBO fallback
+      width = tex.width
+      height = tex.height
+    }
+
+    if (width === 0 || height === 0) return
+
+    let bpp = 4 // Default RGBA8
+    if (tex.format === THREE.RedFormat) bpp = 1
+    else if (tex.format === THREE.RGFormat) bpp = 2
+    else if (tex.format === THREE.RGBFormat) bpp = 3
+
+    if (tex.type === THREE.FloatType) bpp *= 4 // Float32 (HDRI / Compute)
+    else if (tex.type === THREE.HalfFloatType) bpp *= 2 // Float16 (PMREM Env Maps)
+
+    let bytes = width * height * depth * bpp
+
+    // Mipmapping overhead (~33%)
+    if (tex.generateMipmaps || (tex.mipmaps && tex.mipmaps.length > 0)) {
+      bytes *= 1.3333
+    }
+
+    // Si es una textura proveniente de un Render Target (FBO), 
+    // trae atado un Depth Buffer y posiblemente MSAA (Samples)
+    if (isFBO || tex.isRenderTargetTexture) {
+      const depthBytes = width * height * depth * 4 // Depth24Stencil8
+      bytes += depthBytes
+
+      if (assumedSamples > 1) {
+        bytes *= assumedSamples // El peso se multiplica por el nivel de Anti-Aliasing
+      }
+    }
+
+    textureBytes += bytes
+  }
+
+  const checkMaterial = (mat: any) => {
+    if (!mat) return
+
+    // 1. Scan propiedades directas
+    for (const key in mat) {
+      const prop = mat[key]
+      if (prop && prop.isTexture) checkTexture(prop)
+    }
+
+    // 2. Deep scan de Uniforms (Vital para atrapar los FBOs de MeshTransmissionMaterial)
+    if (mat.uniforms) {
+      for (const key in mat.uniforms) {
+        const uniform = mat.uniforms[key]
+        if (uniform && uniform.value) {
+          const val = uniform.value
+          if (val.isTexture || val.isWebGLRenderTarget) {
+            
+            // Detectar heurísticamente si es el buffer de transmisión de Drei
+            // Este buffer escala con la pantalla y suele tener samples=8
+            const isTransmissionFBO = key.toLowerCase().includes('transmission')
+            const isScreenSized = val.image && (val.image.width === screenWidth || val.image.width === screenWidth / pixelRatio)
+            const samples = isTransmissionFBO ? 8 : 1
+            
+            checkTexture(val, isTransmissionFBO || isScreenSized, samples)
+          } else if (Array.isArray(val)) {
+            val.forEach(v => {
+              if (v && (v.isTexture || v.isWebGLRenderTarget)) checkTexture(v)
+            })
           }
-          
-          if (prop.type === THREE.FloatType) {
-            bpp *= 4
-          } else if (prop.type === THREE.HalfFloatType) {
-            bpp *= 2
-          }
-
-          bytes += width * height * bpp
-        }
-
-        if (prop.generateMipmaps) {
-          bytes *= 1.333 // Mipmaps add ~33% overhead
-        }
-      } else if (prop.width && prop.height) {
-        // Render target texture or data texture without standard HTMLImageElement
-        const width = prop.width
-        const height = prop.height
-        const isCube = prop.isCubeTexture || prop.mapping === 301 /* CubeReflectionMapping */ || prop.mapping === 302 /* CubeRefractionMapping */
-        const faces = isCube ? 6 : 1
-        let bpp = 4
-        
-        if (prop.type === THREE.FloatType) {
-          bpp *= 4
-        } else if (prop.type === THREE.HalfFloatType) {
-          bpp *= 2
-        }
-        
-        bytes = width * height * faces * bpp
-        if (prop.generateMipmaps) {
-          bytes *= 1.333
         }
       }
-      textureBytes += bytes
+    }
+
+    // 3. Scan de userData (A veces bibliotecas externas esconden texturas allí)
+    if (mat.userData) {
+      for (const key in mat.userData) {
+        const prop = mat.userData[key]
+        if (prop && prop.isTexture) checkTexture(prop)
+      }
     }
   }
 
-  // Check scene-level background and environment textures (like HDRIs)
+  // Escaneo global de Environment (HDRI / PMREM)
   if (scene.background) checkTexture(scene.background)
-  if (scene.environment) checkTexture(scene.environment)
+  if (scene.environment) checkTexture(scene.environment) // HDRI consume mucha VRAM (HalfFloat + Mipmaps)
 
-  scene.traverse((object) => {
-    // 1. Geometry VRAM
-    if ((object as any).isMesh || (object as any).isPoints || (object as any).isLine) {
-      const mesh = object as any
-      const geometry = mesh.geometry as THREE.BufferGeometry
-
+  scene.traverse((object: any) => {
+    // Geometría
+    if (object.isMesh || object.isPoints || object.isLine) {
+      const geometry = object.geometry as THREE.BufferGeometry
       if (geometry && !seenGeometries.has(geometry.uuid)) {
         seenGeometries.add(geometry.uuid)
-
-        // Add size of all active vertex attributes (position, normal, uv, color, etc.)
         for (const key in geometry.attributes) {
           const attribute = geometry.attributes[key]
           if (attribute && attribute.array) {
             geometryBytes += attribute.array.byteLength
           }
         }
-
-        // Add size of index buffer if it exists
         if (geometry.index && geometry.index.array) {
           geometryBytes += geometry.index.array.byteLength
         }
       }
 
-      // 2. Instanced Mesh attributes (matrices and optional colors)
-      if (mesh.isInstancedMesh && mesh.instanceMatrix) {
-        if (mesh.instanceMatrix.array) {
-          instancedBytes += mesh.instanceMatrix.array.byteLength
-        }
-        if (mesh.instanceColor && mesh.instanceColor.array) {
-          instancedBytes += mesh.instanceColor.array.byteLength
+      // Instancias (Matrices dinámicas)
+      if (object.isInstancedMesh && object.instanceMatrix && object.instanceMatrix.array) {
+        instancedBytes += object.instanceMatrix.array.byteLength
+        if (object.instanceColor && object.instanceColor.array) {
+          instancedBytes += object.instanceColor.array.byteLength
         }
       }
 
-      // 3. Material Textures VRAM
-      const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material]
-      for (const mat of materials) {
-        if (!mat) continue
-
-        // Dynamically find all texture objects referenced in the material
-        for (const propName in mat) {
-          const prop = mat[propName]
-          if (prop && prop.isTexture) {
-            checkTexture(prop)
-          }
-        }
-      }
+      // Materiales (Itera uno o múltiples)
+      const materials = Array.isArray(object.material) ? object.material : [object.material]
+      materials.forEach(checkMaterial)
     }
 
-    // 4. Shadow Map Render Targets VRAM
-    if ((object as any).isLight) {
-      const light = object as any
-      if (light.castShadow && light.shadow) {
-        const shadow = light.shadow
-        
-        // Point lights use WebGLCubeRenderTarget (6 faces), other lights use standard Render Targets (1 face)
-        const isPoint = light.isPointLight || light instanceof THREE.PointLight
-        const faces = isPoint ? 6 : 1
+    // Shadow Maps
+    if (object.isLight && object.castShadow && object.shadow) {
+      const shadow = object.shadow
+      const map = shadow.map
+      const isPoint = object.isPointLight || object instanceof THREE.PointLight
+      const faces = isPoint ? 6 : 1
 
-        if (shadow.map) {
-          const map = shadow.map
-          if (!seenShadowMaps.has(map)) {
-            seenShadowMaps.add(map)
-            // A shadow depth texture typically uses 4 bytes per pixel (Float / UnsignedInt depth format)
-            const width = map.width || 0
-            const height = map.height || 0
-            shadowMapBytes += width * height * faces * 4
-          }
-        } else {
-          // If the shadow map render target is not initialized yet (before first render), estimate from mapSize settings
-          const mapSize = shadow.mapSize || { x: 512, y: 512 }
-          shadowMapBytes += mapSize.x * mapSize.y * faces * 4
+      if (map) {
+        if (!seenShadowMaps.has(map.uuid)) {
+          seenShadowMaps.add(map.uuid)
+          const width = map.width || map.image?.width || 0
+          const height = map.height || map.image?.height || 0
+          shadowMapBytes += width * height * faces * 4 // Float/Depth map (4 bytes)
         }
+      } else {
+        const mapSize = shadow.mapSize || { x: 512, y: 512 }
+        shadowMapBytes += mapSize.x * mapSize.y * faces * 4
       }
     }
   })
 
-  // 5. Canvas Drawing Buffer VRAM (Color + Depth/Stencil backbuffers)
+  // Canvas Drawing Buffer
   if (gl) {
-    const width = (gl as any).drawingBufferWidth || gl.domElement.width
-    const height = (gl as any).drawingBufferHeight || gl.domElement.height
-    // 8 bytes per pixel covers standard RGBA8 color buffer + Depth24Stencil8 stencil-depth buffer
-    canvasBytes = width * height * 8
+    const glContext = gl.getContext()
+    const glAttrs = glContext.getContextAttributes()
+    // Si el antialias está encendido, WebGL reserva un multisample buffer de 4 samples (x4 de memoria)
+    const canvasSamples = glAttrs?.antialias ? 4 : 1
+    
+    // Color (4 bytes) + Depth24Stencil8 (4 bytes) = 8 bytes por pixel * MSAA
+    canvasBytes = screenWidth * screenHeight * 8 * canvasSamples
   }
 
   const totalBytes = geometryBytes + instancedBytes + textureBytes + shadowMapBytes + canvasBytes
