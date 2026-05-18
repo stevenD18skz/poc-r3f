@@ -373,9 +373,9 @@ function ShadowScene({
 }
 
 export default function ShadowsStressTest() {
-  const [count, setCount] = useState(256)
-  const [lightCount, setLightCount] = useState(1)
-  const [isStatic, setIsStatic] = useState(true)
+  const [count, setCount] = useState(16384)
+  const [lightCount, setLightCount] = useState(2)
+  const [isStatic, setIsStatic] = useState(false)
   const [metrics, setMetrics] = useState({ jitter: 0, frameTime: 0 })
 
   return (

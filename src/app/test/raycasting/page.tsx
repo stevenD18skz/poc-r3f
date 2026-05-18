@@ -3,21 +3,17 @@
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { useState, useMemo, useRef, useCallback, useEffect, Suspense } from 'react'
 import * as THREE from 'three'
+import { Perf, getPerf } from 'r3f-perf'
 import PerformanceOverlay from '@/components/test/PerformanceOverlay'
 import DebugTools from '@/components/DebugTools'
 import Loader3D from '@/components/ui/Loader3D'
 
 // ─────────────────────────────────────────────
-// PARÁMETROS DEL TEST (deben ser idénticos en Babylon)
+// PARÁMETROS DEL TEST Y ESTRUCTURAS
 // ─────────────────────────────────────────────
-// Geometría: N esferas moviéndose en 3D (N draw calls, 1 por esfera)
-// Raycasting: manual en useFrame contra N meshes reales
-// Intersection Time: medido con performance.now() alrededor del cast real
-// Click: elimina target + suma score
-// ─────────────────────────────────────────────
-
 const SPHERE_SEGMENTS = 16
 const ARENA_SIZE = 20
+const JITTER_SAMPLE_SIZE = 120
 
 const sharedGeometry = new THREE.SphereGeometry(1, SPHERE_SEGMENTS, SPHERE_SEGMENTS)
 
@@ -27,6 +23,14 @@ interface TargetData {
   velocity: THREE.Vector3
   scale: number
   color: THREE.Color
+}
+
+interface PerformanceMetrics {
+  fps: number
+  cpuTime: number
+  frameTime: number
+  jitter: number
+  intersectionTime: number
 }
 
 function createTarget(id: number): TargetData {
@@ -51,8 +55,40 @@ function createTarget(id: number): TargetData {
   }
 }
 
+// Calculador matemático estricto para Deltas y Jitter
+const deltaCalculator = {
+  samples: new Float32Array(JITTER_SAMPLE_SIZE),
+  index: 0,
+  filled: 0,
+  push(deltaMs: number) {
+    this.samples[this.index] = deltaMs
+    this.index = (this.index + 1) % JITTER_SAMPLE_SIZE
+    this.filled = Math.min(this.filled + 1, JITTER_SAMPLE_SIZE)
+  },
+  mean() {
+    if (this.filled < 1) return 0
+    let sum = 0
+    for (let i = 0; i < this.filled; i++) sum += this.samples[i]
+    return sum / this.filled
+  },
+  jitter() {
+    if (this.filled < 2) return 0
+    const m = this.mean()
+    let variance = 0
+    for (let i = 0; i < this.filled; i++) {
+      const diff = this.samples[i] - m
+      variance += diff * diff
+    }
+    return Math.sqrt(variance / this.filled)
+  },
+  reset() {
+    this.index = 0
+    this.filled = 0
+  }
+}
+
 // ─────────────────────────────────────────────
-// TARGET
+// COMPONENTES ESCENA (TARGET & ARENA)
 // ─────────────────────────────────────────────
 function Target({
   data,
@@ -69,14 +105,9 @@ function Target({
   const pos = useRef(data.position.clone())
   const vel = useRef(data.velocity.clone())
 
-  // ✅ Registrar el mesh en el mapa global para el raycaster manual
   useEffect(() => {
-    if (meshRef.current) {
-      meshRegistry.current.set(data.id, meshRef.current)
-    }
-    return () => {
-      meshRegistry.current.delete(data.id)
-    }
+    if (meshRef.current) meshRegistry.current.set(data.id, meshRef.current)
+    return () => { meshRegistry.current.delete(data.id) }
   }, [data.id, meshRegistry])
 
   useFrame((_, delta) => {
@@ -89,10 +120,7 @@ function Target({
     meshRef.current.position.copy(pos.current)
 
     const targetScale = isHovered.current ? data.scale * 1.3 : data.scale
-    meshRef.current.scale.lerp(
-      new THREE.Vector3(targetScale, targetScale, targetScale),
-      0.2
-    )
+    meshRef.current.scale.lerp(new THREE.Vector3(targetScale, targetScale, targetScale), 0.2)
 
     matRef.current.emissiveIntensity = THREE.MathUtils.lerp(
       matRef.current.emissiveIntensity,
@@ -112,6 +140,7 @@ function Target({
       <meshStandardMaterial
         ref={matRef}
         color={data.color}
+        color-convert-colorspace={false}
         emissive={data.color}
         roughness={0.3}
         metalness={0.4}
@@ -120,112 +149,143 @@ function Target({
   )
 }
 
-// ─────────────────────────────────────────────
-// RAYCAST MONITOR MANUAL
-// ✅ Hace un raycast real contra los meshes registrados
-// y mide el tiempo exacto con performance.now()
-// Esto sí se ejecuta y mide lo que queremos
-// ─────────────────────────────────────────────
-function RaycastMonitor({
-  meshRegistry,
-  onUpdate,
-}: {
-  meshRegistry: React.MutableRefObject<Map<number, THREE.Mesh>>
-  onUpdate: (ms: number) => void
-}) {
-  const { camera, raycaster, pointer } = useThree()
-
-  // Suavizado de la métrica para que no salte tanto
-  const smoothedTime = useRef(0)
-
-  useFrame(() => {
-    const meshes = Array.from(meshRegistry.current.values())
-    if (meshes.length === 0) return
-
-    // ✅ Actualizar el raycaster con la posición actual del mouse
-    raycaster.setFromCamera(pointer, camera)
-
-    // ✅ Medir el tiempo del cast contra los meshes reales
-    const start = performance.now()
-    raycaster.intersectObjects(meshes, false) // false = no recursivo, más rápido
-    const elapsed = performance.now() - start
-
-    // Suavizado exponencial para UI más estable
-    smoothedTime.current = smoothedTime.current * 0.85 + elapsed * 0.15
-    onUpdate(smoothedTime.current)
-  })
-
-  return null
-}
-
-// ─────────────────────────────────────────────
-// ARENA
-// ─────────────────────────────────────────────
 function Arena() {
   return (
     <>
-      {/* raycast={() => null} → excluye del raycaster, no interfiere en la medición */}
       <mesh rotation-x={-Math.PI / 2} receiveShadow raycast={() => null}>
         <circleGeometry args={[ARENA_SIZE, 64]} />
         <meshStandardMaterial color="#0d0d1a" roughness={0.8} />
-      </mesh>
-      <mesh rotation-x={-Math.PI / 2} position={[0, 0.01, 0]} raycast={() => null}>
-        <ringGeometry args={[ARENA_SIZE - 0.3, ARENA_SIZE, 64]} />
-        <meshBasicMaterial color="#6366f1" opacity={0.5} transparent />
       </mesh>
     </>
   )
 }
 
 // ─────────────────────────────────────────────
-// HUD
+// CORE METRICS COLLECTOR + MANUAL RAYCAST
+// ─────────────────────────────────────────────
+function RaycastAndMetricsCollector({
+  meshRegistry,
+  onUpdate,
+  count
+}: {
+  meshRegistry: React.MutableRefObject<Map<number, THREE.Mesh>>
+  onUpdate: (m: PerformanceMetrics) => void
+  count: number
+}) {
+  const { camera, raycaster, pointer } = useThree()
+  const frameCount = useRef(0)
+  const lastLogTime = useRef(performance.now())
+  const lastCount = useRef(count)
+  
+  const smoothedIntersectionTime = useRef(0)
+
+  if (lastCount.current !== count) {
+    lastCount.current = count
+    frameCount.current = 0
+    deltaCalculator.reset()
+  }
+
+  useFrame((_, delta) => {
+    frameCount.current++
+    const now = performance.now()
+    const deltaMs = delta * 1000
+    deltaCalculator.push(deltaMs)
+
+    // 1. Ejecutar y Medir Raycasting Manual Estricto
+    const meshes = Array.from(meshRegistry.current.values())
+    let elapsedRaycast = 0
+
+    if (meshes.length > 0) {
+      raycaster.setFromCamera(pointer, camera)
+      const startRaycast = performance.now()
+      raycaster.intersectObjects(meshes, false)
+      elapsedRaycast = performance.now() - startRaycast
+    }
+    
+    smoothedIntersectionTime.current = smoothedIntersectionTime.current * 0.85 + elapsedRaycast * 0.15
+
+    // 2. Extraer datos crudos de r3f-perf
+    const perfState = getPerf ? getPerf() : null
+    const logData = perfState?.log
+    const currentFps = logData?.fps ?? (deltaMs > 0 ? 1000 / deltaMs : 0)
+
+    // Actualizar HUD cada 10 frames
+    if (frameCount.current % 10 === 0) {
+      onUpdate({
+        fps: Math.round(currentFps),
+        cpuTime: logData?.cpu ?? 0,
+        frameTime: deltaCalculator.mean(),
+        jitter: deltaCalculator.jitter(),
+        intersectionTime: smoothedIntersectionTime.current
+      })
+    }
+
+    // Reportar en consola estructuradamente cada 10 segundos
+    if (now - lastLogTime.current >= 10000) {
+      const meanFrameTime = deltaCalculator.mean()
+      
+      console.log(
+        `%c[Raycasting Test] ${count.toLocaleString()} Targets - ${new Date().toLocaleTimeString()}`,
+        'color:#6366f1;font-weight:bold;font-size:12px'
+      )
+      console.log(`%cFPS%c ${Math.round(1000 / meanFrameTime)}`, 'color:#94a3b8', 'color:#f1f5f9;font-weight:600')
+      console.log(`%cCPU (ms)%c ${(logData?.cpu ?? 0).toFixed(2)} ms`, 'color:#94a3b8', 'color:#38bdf8;font-weight:600')
+      console.log(`%cFrame Time (ms)%c ${meanFrameTime.toFixed(2)} ms`, 'color:#94a3b8', 'color:#f1f5f9;font-weight:600')
+      console.log(`%cJitter (ms)%c ${deltaCalculator.jitter().toFixed(2)} ms`, 'color:#94a3b8', 'color:#fbbf24;font-weight:600')
+      console.log(`%cIntersection Time (ms)%c ${smoothedIntersectionTime.current.toFixed(3)} ms`, 'color:#94a3b8', 'color:#f87171;font-weight:600')
+      
+      lastLogTime.current = now
+    }
+  })
+
+  return null
+}
+
+// ─────────────────────────────────────────────
+// HUD DE MÉTRICAS EXCLUSIVAS
 // ─────────────────────────────────────────────
 function GameHUD({
   score,
   missed,
-  count,
-  intersectionTime,
+  metrics
 }: {
   score: number
   missed: number
-  count: number
-  intersectionTime: number
+  metrics: PerformanceMetrics
 }) {
-  const accuracy = score + missed > 0
-    ? Math.round((score / (score + missed)) * 100)
-    : 100
-
-  // Color de la métrica según el tiempo
-  const timeColor =
-    intersectionTime < 0.1 ? 'text-emerald-400' :
-    intersectionTime < 0.5 ? 'text-yellow-400' :
-    'text-red-400'
+  const accuracy = score + missed > 0 ? Math.round((score / (score + missed)) * 100) : 100
 
   return (
-    <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-3 min-w-[160px]">
-      <div className="bg-black/80 backdrop-blur-xl border border-emerald-500/40 px-5 py-3 rounded-xl">
-        <p className="text-gray-400 text-xs uppercase tracking-widest mb-1">Score</p>
-        <p className="text-3xl font-mono font-black text-emerald-400">{score}</p>
+    <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-2 min-w-[200px] bg-black/80 backdrop-blur-xl border border-white/10 p-4 rounded-xl font-mono text-sm">
+      <div className="flex justify-between border-b border-white/10 pb-1 mb-2 text-xs uppercase tracking-wider text-gray-400 font-bold">
+        <span>Gameplay</span>
+        <span className="text-emerald-400">Acc: {accuracy}%</span>
       </div>
+      <div className="flex justify-between"><span>Score:</span><span className="text-emerald-400 font-bold">{score}</span></div>
+      <div className="flex justify-between mb-2"><span>Missed:</span><span className="text-red-400">{missed}</span></div>
 
-      <div className="bg-black/80 backdrop-blur-xl border border-blue-500/40 px-5 py-3 rounded-xl">
-        <p className="text-gray-400 text-xs uppercase tracking-widest mb-1">Precisión</p>
-        <p className="text-2xl font-mono font-black text-blue-400">{accuracy}%</p>
+      <div className="flex justify-between border-b border-white/10 pb-1 mb-2 text-xs uppercase tracking-wider text-gray-400 font-bold">
+        <span>Métricas Test</span>
       </div>
-
-      <div className="bg-black/80 backdrop-blur-xl border border-purple-500/40 px-5 py-3 rounded-xl">
-        <p className="text-gray-400 text-xs uppercase tracking-widest mb-1">Targets</p>
-        <p className="text-2xl font-mono font-black text-purple-400">{count}</p>
+      <div className="flex justify-between">
+        <span>FPS:</span>
+        <span className="font-bold text-sky-400">{metrics.fps}</span>
       </div>
-
-      {/* ✅ Intersection Time real */}
-      <div className="bg-black/80 backdrop-blur-xl border border-red-500/40 px-5 py-3 rounded-xl">
-        <p className="text-gray-400 text-xs uppercase tracking-widest mb-1">Intersección</p>
-        <p className={`text-2xl font-mono font-black ${timeColor}`}>
-          {intersectionTime.toFixed(3)}
-          <span className="text-xs text-gray-500 ml-1">ms</span>
-        </p>
-        <p className="text-gray-600 text-[10px] mt-1">raycast/frame</p>
+      <div className="flex justify-between">
+        <span>CPU (ms):</span>
+        <span className="text-sky-400">{metrics.cpuTime.toFixed(2)}</span>
+      </div>
+      <div className="flex justify-between">
+        <span>Frame Time:</span>
+        <span className="text-white">{metrics.frameTime.toFixed(2)} ms</span>
+      </div>
+      <div className="flex justify-between">
+        <span>Jitter:</span>
+        <span className="text-yellow-400">{metrics.jitter.toFixed(2)} ms</span>
+      </div>
+      <div className="flex justify-between mt-1 pt-1 border-t border-white/5 font-bold">
+        <span className="text-red-300">Intersection:</span>
+        <span className="text-red-400">{metrics.intersectionTime.toFixed(3)} ms</span>
       </div>
     </div>
   )
@@ -234,32 +294,28 @@ function GameHUD({
 function Crosshair() {
   return (
     <div className="fixed inset-0 flex items-center justify-center pointer-events-none z-40">
-      <div className="relative w-8 h-8">
-        <div className="absolute top-1/2 left-0 right-0 h-px bg-white/60 -translate-y-1/2" />
-        <div className="absolute left-1/2 top-0 bottom-0 w-px bg-white/60 -translate-x-1/2" />
-        <div className="absolute top-1/2 left-1/2 w-1.5 h-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/80" />
-      </div>
+      <div className="relative w-4 h-4 border border-white/40 rounded-full" />
     </div>
   )
 }
 
 // ─────────────────────────────────────────────
-// PÁGINA PRINCIPAL
+// VISTA PRINCIPAL
 // ─────────────────────────────────────────────
 export default function RaycastTest() {
-  const [count, setCount] = useState(5000)
+  const [count, setCount] = useState(400)
   const [score, setScore] = useState(0)
   const [missed, setMissed] = useState(0)
-  const [intersectionTime, setIntersectionTime] = useState(0)
+  
+  const [metrics, setMetrics] = useState<PerformanceMetrics>({
+    fps: 0, cpuTime: 0, frameTime: 0, jitter: 0, intersectionTime: 0
+  })
+
   const nextId = useRef(0)
   const isHittingTarget = useRef(false)
-
-  // Mapa global de meshes para el RaycastMonitor
   const meshRegistry = useRef<Map<number, THREE.Mesh>>(new Map())
 
-  const [targets, setTargets] = useState<TargetData[]>(() =>
-    Array.from({ length: 50 }, () => createTarget(nextId.current++))
-  )
+  const [targets, setTargets] = useState<TargetData[]>([])
 
   useEffect(() => {
     nextId.current = 0
@@ -272,57 +328,48 @@ export default function RaycastTest() {
   const handleHit = useCallback((id: number) => {
     isHittingTarget.current = true
     setScore((s) => s + 1)
-    setTargets((prev) =>
-      prev.map((t) => (t.id === id ? createTarget(nextId.current++) : t))
-    )
+    setTargets((prev) => prev.map((t) => (t.id === id ? createTarget(nextId.current++) : t)))
   }, [])
 
-  // ✅ Solo contar missed si NO se acertó un target
   const handlePointerDown = useCallback(() => {
-    if (!isHittingTarget.current) {
-      setMissed((m) => m + 1)
-    }
+    if (!isHittingTarget.current) setMissed((m) => m + 1)
     isHittingTarget.current = false
   }, [])
 
   return (
     <main
-      className="relative w-full h-screen bg-[#050505] overflow-hidden"
+      className="relative w-full h-screen bg-[#050505] overflow-hidden select-none"
       style={{ cursor: 'crosshair' }}
       onPointerDown={handlePointerDown}
     >
       <PerformanceOverlay
-        title={`Raycasting: ${count} Targets`}
+        title="Benchmark Raycasting"
         input={true}
         count={count}
         setCount={setCount}
         inputConfig={{ unit: 'normal', type: 'values', values: [50, 200, 500, 1000, 5000] }}
       />
 
-      <GameHUD
-        score={score}
-        missed={missed}
-        count={count}
-        intersectionTime={intersectionTime}
-      />
-
+      <GameHUD score={score} missed={missed} metrics={metrics} />
       <Crosshair />
 
       <Canvas
-        shadows
+        shadows={false}
         camera={{ position: [0, 15, 35], fov: 60 }}
-        raycaster={{ params: {
-            Line: { threshold: 0 }, Points: { threshold: 0 },
-            Mesh: undefined,
-            LOD: undefined,
-            Sprite: undefined
-        } }}
+        gl={{ antialias: true, powerPreference: "high-performance" }}
       >
-        <ambientLight intensity={0.4} />
-        <pointLight position={[10, 10, 10]} intensity={1.5} />
+        <ambientLight intensity={0.5} />
+        <pointLight position={[10, 15, 10]} intensity={1} />
 
-        {/* ✅ Monitor con raycast manual y medición real */}
-        <RaycastMonitor meshRegistry={meshRegistry} onUpdate={setIntersectionTime} />
+        {/* Instancia oculta para tracking de CPU mediante WebGL Hooks */}
+        <Perf minimal style={{ display: 'none' }} />
+
+        {/* Orquestador de Raycast manual y recolección limpia */}
+        <RaycastAndMetricsCollector 
+          meshRegistry={meshRegistry} 
+          onUpdate={setMetrics} 
+          count={count} 
+        />
 
         <Suspense fallback={null}>
           <Arena />
@@ -331,7 +378,7 @@ export default function RaycastTest() {
           ))}
         </Suspense>
 
-        <DebugTools title="Raycasting Dinámico" entityCount={count} />
+
       </Canvas>
     </main>
   )
