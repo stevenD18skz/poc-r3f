@@ -6,6 +6,7 @@ import { Environment, OrbitControls } from '@react-three/drei'
 import PerformanceOverlay from '@/components/test/PerformanceOverlay'
 import Loader3D from '@/components/ui/Loader3D'
 import * as THREE from 'three'
+import { getVRAMUsage } from '@/utils/vram'
 
 // ─── MÉTRICAS BASALES ────────────────────────────────────────────────────────
 const JITTER_SAMPLE_SIZE = 120
@@ -47,7 +48,7 @@ function BaselineMetricsCollector() {
   const cpuIndex = useRef(0)
   const cpuFilled = useRef(0)
 
-  const { gl, gl: { domElement } } = useThree()
+  const { gl, scene } = useThree()
 
   useFrame((state) => {
     // 1. Cronómetro de inicio de CPU
@@ -82,12 +83,14 @@ function BaselineMetricsCollector() {
       const realCpuMs = cpuFilled.current > 0 ? cpuSum / cpuFilled.current : 0
 
       const drawCalls = gl.info.render.calls
-      const textures = gl.info.memory.textures
+      const texturesCount = gl.info.memory.textures
       const triangles = gl.info.render.triangles
       
       const mem = (performance as any).memory
       const ramMB = mem ? (mem.usedJSHeapSize / 1048576).toFixed(1) : 'N/A'
-      const vramMB = ((triangles * 3 * 12) / 1048576).toFixed(1)
+      
+      // VRAM: cálculo preciso a través de la escena y buffers de WebGL
+      const vram = getVRAMUsage(gl, scene)
       
       console.groupCollapsed(
         `%c[R3F Test] Baseline Idle - ${new Date().toLocaleTimeString()}`,
@@ -97,7 +100,15 @@ function BaselineMetricsCollector() {
       // ─── ORDEN ESTÁNDAR REQUERIDO ──────────────────────────────────────────
       console.log(`%cFPS Promedio         %c${avgFps.toFixed(1)}`, 'color:#94a3b8', 'color:#f1f5f9;font-weight:600')
       console.log(`%cRAM                  %c${ramMB} MB`, 'color:#94a3b8', 'color:#f1f5f9;font-weight:600')
-      console.log(`%cVRAM Estimada        %c${vramMB} MB`, 'color:#94a3b8', 'color:#f1f5f9;font-weight:600')
+      
+      // Breakdown visual y ultra detallado de la VRAM en consola
+      console.log(`%cVRAM Total (Escena)  %c${vram.total} MB`, 'color:#94a3b8', 'color:#10b981;font-weight:700')
+      console.log(`  %c├─ Geometrías       %c${vram.geometries} MB`, 'color:#64748b', 'color:#cbd5e1')
+      console.log(`  %c├─ Instancias        %c${vram.instances} MB`, 'color:#64748b', 'color:#cbd5e1')
+      console.log(`  %c├─ Texturas (HDR)    %c${vram.textures} MB`, 'color:#64748b', 'color:#fbbf24')
+      console.log(`  %c├─ Shadow Maps       %c${vram.shadowMaps} MB`, 'color:#64748b', 'color:#cbd5e1')
+      console.log(`  %c└─ Canvas/Viewport   %c${vram.canvas} MB`, 'color:#64748b', 'color:#cbd5e1')
+
       console.log(`%cCPU (ms)             %c${realCpuMs.toFixed(3)} ms`, 'color:#94a3b8', 'color:#60a5fa;font-weight:600') // <--- ¡AQUÍ ESTÁ TU 0.2 ms NETO!
       console.log(`%cFrame Time           %c${frameTime.toFixed(2)} ms`, 'color:#94a3b8', 'color:#f1f5f9;font-weight:600')
       console.log(`%cJitter               %c${jitter.toFixed(2)} ms`, 'color:#94a3b8', 'color:#f1f5f9;font-weight:600')
@@ -105,7 +116,8 @@ function BaselineMetricsCollector() {
       
       // ─── MÉTRICAS EXTRA ────────────────────────────────────────────────────
       console.log(`%cDraw Calls           %c${drawCalls}`, 'color:#94a3b8', 'color:#f1f5f9;font-weight:600')
-      console.log(`%cTexturas (HDR)       %c${textures}`, 'color:#94a3b8', 'color:#f1f5f9;font-weight:600')
+      console.log(`%cTexturas (Conteo)     %c${texturesCount}`, 'color:#94a3b8', 'color:#f1f5f9;font-weight:600')
+      console.log(`%cTriángulos            %c${triangles.toLocaleString()}`, 'color:#94a3b8', 'color:#cbd5e1')
       
       console.groupEnd()
 

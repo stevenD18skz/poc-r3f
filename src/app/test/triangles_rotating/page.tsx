@@ -6,6 +6,7 @@ import * as THREE from 'three'
 import PerformanceOverlay from '@/components/test/PerformanceOverlay'
 import { OrbitControls } from '@react-three/drei'
 import Loader3D from '@/components/ui/Loader3D'
+import { getVRAMUsage } from '@/utils/vram'
 import { Perf, getPerf } from 'r3f-perf'
 
 // ─────────────────────────────────────────────
@@ -62,7 +63,7 @@ function MetricsCollector({ onUpdate, count }: { onUpdate: (m: any) => void; cou
   // maxFrameTime ahora trackea el pico del período actual (últimos 10s)
   const periodMaxFrameTime = useRef(0)
   const lastCount = useRef(count)
-  const { gl } = useThree()
+  const { gl, scene } = useThree()
 
   if (lastCount.current !== count) {
     startTime.current = performance.now()
@@ -97,6 +98,7 @@ function MetricsCollector({ onUpdate, count }: { onUpdate: (m: any) => void; cou
 
     // HUD: actualizar cada 10 frames
     if (frameCount.current % 10 === 0) {
+      const vram = getVRAMUsage(gl, scene)
       onUpdate({
         // Frame time = media de los deltas reales entre frames
         frameTime: Math.round(deltaCalculator.mean() * 100) / 100,
@@ -105,6 +107,7 @@ function MetricsCollector({ onUpdate, count }: { onUpdate: (m: any) => void; cou
         loadTime: loadTime.current,
         // CPU time de r3f-perf, reportado separado y con su nombre correcto
         cpuTime: logData?.cpu ?? 0,
+        vram: parseFloat(vram.total),
       })
     }
 
@@ -121,29 +124,25 @@ function MetricsCollector({ onUpdate, count }: { onUpdate: (m: any) => void; cou
       const drawCalls = gl.info.render.calls
       const triangles = gl.info.render.triangles
 
-      // VRAM: estimación honesta con los buffers que Three.js sí reporta
-      // Posiciones: triangles * 3 verts * 12 bytes (3 floats)
-      // Normales: mismo tamaño que posiciones
-      // UVs: triangles * 3 verts * 8 bytes (2 floats)
-      // Instance matrices: count * 64 bytes (mat4 de floats)
-      // Instance colors: count * 12 bytes (vec3 de floats)
-      const posBytes = triangles * 3 * 12
-      const normalBytes = posBytes
-      const uvBytes = triangles * 3 * 8
-      const matrixBytes = count * 64
-      const colorBytes = count * 12
-      const totalBytes = posBytes + normalBytes + uvBytes + matrixBytes + colorBytes
-      const vramMB = (totalBytes / 1048576).toFixed(2)
-
+      // VRAM: cálculo preciso a través de la escena y buffers de WebGL
+      const vram = getVRAMUsage(gl, scene)
       const ramMB = data.mem?.toFixed(1) ?? 'N/A'
 
       console.log(
-        `%c[R3F Static] ${count.toLocaleString()} Instancias - ${new Date().toLocaleTimeString()}`,
+        `%c[R3F Triangles Rotating] ${count.toLocaleString()} Instancias - ${new Date().toLocaleTimeString()}`,
         'color:#3b82f6;font-weight:700;font-size:12px',
       )
       console.log(`%cFPS Promedio         %c${avgFps.toFixed(1)}`, 'color:#94a3b8', 'color:#f1f5f9;font-weight:600')
       console.log(`%cRAM                  %c${ramMB} MB`, 'color:#94a3b8', 'color:#f1f5f9;font-weight:600')
-      console.log(`%cVRAM Estimada        %c${vramMB} MB (geom+inst)`, 'color:#94a3b8', 'color:#f1f5f9;font-weight:600')
+      
+      // Breakdown visual y ultra detallado de la VRAM en consola
+      console.log(`%cVRAM Total (Escena)  %c${vram.total} MB`, 'color:#94a3b8', 'color:#3b82f6;font-weight:700')
+      console.log(`  %c├─ Geometrías       %c${vram.geometries} MB`, 'color:#64748b', 'color:#cbd5e1')
+      console.log(`  %c├─ Instancias        %c${vram.instances} MB`, 'color:#64748b', 'color:#cbd5e1')
+      console.log(`  %c├─ Texturas          %c${vram.textures} MB`, 'color:#64748b', 'color:#cbd5e1')
+      console.log(`  %c├─ Shadow Maps       %c${vram.shadowMaps} MB`, 'color:#64748b', 'color:#cbd5e1')
+      console.log(`  %c└─ Canvas/Viewport   %c${vram.canvas} MB`, 'color:#64748b', 'color:#cbd5e1')
+
       // CPU time de r3f-perf reportado con su nombre exacto, separado de frame time
       console.log(`%cCPU r3f-perf (ms)    %c${data.cpu.toFixed(2)} ms`, 'color:#94a3b8', 'color:#60a5fa;font-weight:600')
       console.log(`%cFrame Time (media)   %c${frameTimeMean.toFixed(2)} ms`, 'color:#94a3b8', 'color:#f1f5f9;font-weight:600')
@@ -151,9 +150,9 @@ function MetricsCollector({ onUpdate, count }: { onUpdate: (m: any) => void; cou
       console.log(`%cJitter               %c${jitter.toFixed(2)} ms`, 'color:#94a3b8', 'color:#f1f5f9;font-weight:600')
       console.log(`%cLoad Time            %c${loadTime.current.toFixed(1)} ms`, 'color:#94a3b8', 'color:#f1f5f9;font-weight:600')
       console.log(`%cDraw Calls           %c${drawCalls}`, 'color:#94a3b8', 'color:#f1f5f9;font-weight:600')
+      console.log(`%cTriángulos / Frame    %c${triangles.toLocaleString()}`, 'color:#94a3b8', 'color:#cbd5e1')
       // Pico del período actual (se resetea en cada log)
       console.log(`%cPico Latencia (10s)  %c${periodMaxFrameTime.current.toFixed(2)} ms`, 'color:#94a3b8', 'color:#f87171;font-weight:600')
-      // console.groupEnd()
 
       // Reset del pico al iniciar nuevo período
       periodMaxFrameTime.current = 0
