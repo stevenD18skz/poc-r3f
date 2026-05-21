@@ -5,39 +5,7 @@ import { Canvas } from '@react-three/fiber'
 import { OrbitControls, useGLTF, useAnimations, Environment, ContactShadows } from '@react-three/drei'
 import { useControls } from 'leva'
 import Castle from './models/castle'
-
-
-function Character() {
-  const { scene, animations } = useGLTF('/models/sims/Character Animated.glb')
-  const { actions, names } = useAnimations(animations, scene)
-
-  // Use Leva to create a dropdown with the available animations
-  const { animation } = useControls('Character', {
-    animation: {
-      options: names.length > 0 ? names : ['None'],
-    }
-  })
-
-  useEffect(() => {
-    // Play the selected animation
-    if (actions && animation && actions[animation]) {
-      actions[animation].reset().fadeIn(0.2).play()
-      return () => {
-        actions[animation]?.fadeOut(0.2)
-      }
-    }
-  }, [animation, actions])
-
-  useEffect(() => {
-    scene.traverse((child: any) => {
-      if (child.isMesh) {
-        child.castShadow = true
-      }
-    })
-  }, [scene])
-
-  return <primitive object={scene} position={[0, 0, 0]} />
-}
+import Character from './models/Character'
 
 function Cubone() {
   const { scene } = useGLTF('/models/sims/Cubone.glb')
