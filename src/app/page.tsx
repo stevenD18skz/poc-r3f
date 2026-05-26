@@ -17,6 +17,14 @@ export default function Home() {
       path: '/game',
       icon: '🎮',
       cta: 'Explorar la Casa'
+    },
+    {
+      id: 'asset_showcase',
+      title: 'Asset Showcase',
+      description: 'Prueba de concepto funcional: exploración FPS en primera persona con generación procedural de habitaciones, física y mascotas.',
+      path: '/asset_showcase',
+      icon: '📦',
+      cta: 'Explorar Assets'
     }
   ]
 
@@ -44,7 +52,7 @@ export default function Home() {
       </header>
 
       {/* Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8 w-full max-w-4xl relative z-10">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-8 w-full max-w-7xl relative z-10">
         {sections.map((section) => (
           <Link
             key={section.id}
