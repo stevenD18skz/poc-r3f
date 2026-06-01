@@ -1,7 +1,7 @@
 'use client'
 
-import React, { Suspense, useEffect } from 'react'
-import { Canvas } from '@react-three/fiber'
+import React, { Suspense, useEffect, useMemo, useRef } from 'react'
+import { Canvas, useThree } from '@react-three/fiber'
 import { OrbitControls, useGLTF, Environment, Text, Plane } from '@react-three/drei'
 import * as THREE from 'three'
 
@@ -25,44 +25,41 @@ const models = [
   ...interiorProps.map(name => ({ url: `/models/sims/Ultimate Interior Props Pack-glb/${name}`, name }))
 ];
 
+// Normalize model: compute scale + offset via group transform (no clone needed)
 function AssetModel({ url, name }: { url: string, name: string }) {
   const { scene } = useGLTF(url)
-  
-  const clonedScene = React.useMemo(() => {
-    const c = scene.clone()
-    
-    const box = new THREE.Box3().setFromObject(c)
+  const groupRef = useRef<THREE.Group>(null)
+
+  const { normalizedScale, offset } = useMemo(() => {
+    const box = new THREE.Box3().setFromObject(scene)
     const size = box.getSize(new THREE.Vector3())
     const center = box.getCenter(new THREE.Vector3())
-    
-    const maxDim = Math.max(size.x, size.y, size.z)
-    const scale = maxDim > 0 ? 2.5 / maxDim : 1
-    c.scale.set(scale, scale, scale)
-    
-    c.position.x = -center.x * scale
-    c.position.y = -box.min.y * scale
-    c.position.z = -center.z * scale
 
-    c.traverse((child: any) => {
-      if (child.isMesh) {
-        child.castShadow = true
-        child.receiveShadow = true
-      }
-    })
-    
-    return c
+    const maxDim = Math.max(size.x, size.y, size.z)
+    const s = maxDim > 0 ? 2 / maxDim : 1
+
+    return {
+      normalizedScale: s,
+      offset: new THREE.Vector3(
+        -center.x,
+        -box.min.y,
+        -center.z
+      )
+    }
   }, [scene])
 
   return (
     <>
-      <primitive object={clonedScene} />
+      <group ref={groupRef} scale={normalizedScale}>
+        <primitive object={scene} position={[offset.x, offset.y, offset.z]} />
+      </group>
       <Text
-        position={[0, 3.0, 0]}
-        fontSize={0.25}
+        position={[0, 2.8, 0]}
+        fontSize={0.22}
         color="#333333"
         anchorX="center"
         anchorY="middle"
-        outlineWidth={0.03}
+        outlineWidth={0.02}
         outlineColor="#ffffff"
       >
         {name.replace('.glb', '')}
@@ -82,7 +79,7 @@ function AssetItem({ url, position, name }: { url: string, position: [number, nu
           anchorX="center"
           anchorY="middle"
         >
-          Cargando...
+          ...
         </Text>
       }>
         <AssetModel url={url} name={name} />
@@ -93,34 +90,28 @@ function AssetItem({ url, position, name }: { url: string, position: [number, nu
 
 export default function AssetShowcasePage() {
   const GRID_SIZE = Math.ceil(Math.sqrt(models.length));
-  const SPACING = 4; // Space between models
+  const SPACING = 4;
 
   return (
     <div style={{ width: '100vw', height: '100vh', margin: 0, padding: 0 }}>
-      <Canvas shadows camera={{ position: [0, 20, 30], fov: 50 }}>
+      <Canvas
+        camera={{ position: [0, 25, 40], fov: 50 }}
+        dpr={[1, 1.5]}
+        performance={{ min: 0.5 }}
+        gl={{ antialias: true, powerPreference: 'high-performance' }}
+      >
         <color attach="background" args={['#87CEEB']} />
         <DebugTools title={''} />
         
-        <ambientLight intensity={0.5} />
-        <directionalLight 
-          position={[20, 40, 20]} 
-          intensity={1.5} 
-          castShadow 
-          shadow-mapSize={4096}
-          shadow-bias={-0.0001}
-          shadow-camera-left={-60}
-          shadow-camera-right={60}
-          shadow-camera-top={60}
-          shadow-camera-bottom={-60}
-        />
-        <Environment preset="city" />
+        <ambientLight intensity={0.7} />
+        <directionalLight position={[20, 40, 20]} intensity={1.2} />
+        <hemisphereLight args={['#87CEEB', '#d0d5dc', 0.4]} />
 
         <Suspense fallback={null}>
           <group position={[0, 0, 0]}>
             {models.map((modelInfo, index) => {
               const row = Math.floor(index / GRID_SIZE);
               const col = index % GRID_SIZE;
-              // Center the grid layout based on grid size
               const x = (col - GRID_SIZE / 2) * SPACING + (SPACING / 2);
               const z = (row - GRID_SIZE / 2) * SPACING + (SPACING / 2);
               
@@ -135,12 +126,10 @@ export default function AssetShowcasePage() {
             })}
           </group>
           
-          {/* Ground plane for shadows */}
           <Plane 
             args={[300, 300]} 
             rotation={[-Math.PI / 2, 0, 0]} 
             position={[0, -0.01, 0]} 
-            receiveShadow
           >
             <meshStandardMaterial color="#d0d5dc" />
           </Plane>
